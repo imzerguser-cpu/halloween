@@ -1,0 +1,560 @@
+/* 할로윈 귀신 방탈출 — 앱 흐름, 저장, 구글 시트·드라이브 연동
+ * 개인정보 원칙: 학생 이름은 메모리(roster)에만 둔다. localStorage·IndexedDB·파일명에는 조 번호만.
+ */
+(function () {
+  'use strict';
+
+  // ---------- 상태 ----------
+  const LS_CONF = 'hg_conf';    // { apiUrl, apiKey, stationId }
+  const LS_CACHE = 'hg_cache';  // { stations, settings, groupNums, excluded, fetchedAt }  ※ 이름 없음
+  const DEFAULT_PIN = '1031';
+
+  let conf = readLS(LS_CONF) || {};
+  let cache = readLS(LS_CACHE) || { stations: [], settings: {}, groupNums: [], excluded: [] };
+  let roster = null;            // { [group]: [{name, grade}] } — 메모리 전용
+  let asset = null;             // 이 장소의 귀신 소재
+  let assetState = '확인 전';
+  let cur = { group: null, lastId: null };
+  let stream = null;
+  let camMode = 'student';      // student | background | test
+  let wakeLock = null;
+
+  const $ = (id) => document.getElementById(id);
+  const station = () => cache.stations.find((s) => s.id === conf.stationId) || null;
+  const setting = (k, d) => (cache.settings && cache.settings[k]) || d;
+
+  function readLS(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  // ---------- 화면 전환 ----------
+  const SCREENS = ['scrSetup', 'scrHome', 'scrConfirm', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
+  function show(id) {
+    SCREENS.forEach((s) => { $(s).hidden = s !== id; });
+    window.scrollTo(0, 0);
+  }
+  function goHome() {
+    cur = { group: null, lastId: null };
+    if (!station()) return show('scrSetup');
+    renderHome();
+    show('scrHome');
+  }
+
+  function toast(msg, ms) {
+    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, ms || 2500);
+  }
+
+  // ---------- IndexedDB ----------
+  const db = (() => {
+    let p;
+    const open = () => p || (p = new Promise((res, rej) => {
+      const r = indexedDB.open('halloween-ghost', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+    const tx = async (mode, fn) => {
+      const d = await open();
+      return new Promise((res, rej) => {
+        const t = d.transaction('photos', mode);
+        const out = fn(t.objectStore('photos'));
+        t.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
+        t.onerror = () => rej(t.error);
+        t.onabort = () => rej(t.error);
+      });
+    };
+    return {
+      put: (rec) => tx('readwrite', (s) => s.put(rec)),
+      get: (id) => tx('readonly', (s) => s.get(id)),
+      all: () => tx('readonly', (s) => s.getAll()),
+      clear: () => tx('readwrite', (s) => s.clear())
+    };
+  })();
+
+  // ---------- 귀신 배정 ----------
+  function fnv1a(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return h >>> 0;
+  }
+  function ghostStations() {
+    return cache.stations.filter((s) => s.ghost).map((s) => s.id).sort();
+  }
+  /** 이 조의 귀신 장소 id (없으면 null) */
+  function ghostStationFor(group) {
+    if (cache.excluded.includes(group)) return null;
+    const list = ghostStations();
+    if (!list.length) return null;
+    return list[fnv1a(setting('귀신시드', '0') + ':' + group) % list.length];
+  }
+  function computeExcluded(groups) {
+    const grades = setting('제외학년', '1,2').split(/[,\s]+/).map(Number).filter(Boolean);
+    const manual = setting('귀신제외조', '').split(/[,\s]+/).map(Number).filter(Boolean);
+    const ex = new Set(manual);
+    groups.forEach((g) => { if (g.members.some((m) => grades.includes(m.grade))) ex.add(g.group); });
+    return [...ex].sort((a, b) => a - b);
+  }
+
+  // ---------- 구글 시트 ----------
+  async function loadRoster(silent) {
+    if (!conf.apiUrl || !conf.apiKey) return false;
+    try {
+      const url = conf.apiUrl + (conf.apiUrl.includes('?') ? '&' : '?') + 'action=roster&key=' + encodeURIComponent(conf.apiKey);
+      const r = await fetch(url, { cache: 'no-store' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error === 'key' ? '비밀 키가 맞지 않아요' : '시트 응답 오류');
+      roster = {};
+      j.groups.forEach((g) => { roster[g.group] = g.members; });
+      cache = {
+        stations: j.stations,
+        settings: j.settings,
+        groupNums: j.groups.map((g) => g.group),
+        excluded: computeExcluded(j.groups),
+        fetchedAt: j.fetchedAt
+      };
+      writeLS(LS_CACHE, cache);
+      if (!silent) setStatus('connStatus', `불러옴: ${j.groups.length}개 조, 장소 ${j.stations.length}곳 (${new Date().toLocaleTimeString()})`, 'ok');
+      return true;
+    } catch (e) {
+      setStatus('connStatus', '불러오기 실패: ' + e.message + (cache.fetchedAt ? ' — 저장된 설정으로 진행합니다(이름 표시 없음)' : ''), 'err');
+      return false;
+    }
+  }
+  function setStatus(id, msg, cls) { const el = $(id); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : ''); }
+
+  // ---------- 드라이브 업로드 ----------
+  function blobToB64(blob) {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result).split(',')[1]);
+      fr.onerror = () => rej(fr.error);
+      fr.readAsDataURL(blob);
+    });
+  }
+  async function postFile(kind, filename, blob) {
+    const body = JSON.stringify({ key: conf.apiKey, action: 'upload', kind, filename, mime: blob.type || 'image/jpeg', data: await blobToB64(blob) });
+    const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'upload');
+  }
+  let uploading = false;
+  async function uploadPending(report) {
+    if (uploading || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return 0;
+    uploading = true;
+    let n = 0, fail = 0;
+    try {
+      const recs = (await db.all()).filter(needsUpload);
+      for (const rec of recs) {
+        try {
+          if (!rec.up.orig) { await postFile('원본', fileName(rec, '원본'), rec.original); rec.up.orig = true; await db.put(rec); n++; }
+          if (rec.composite && !rec.up.comp) { await postFile('수정본', fileName(rec, '수정본'), rec.composite); rec.up.comp = true; await db.put(rec); n++; }
+        } catch (e) { fail++; }
+        if (report) setStatus('galStatus', `올리는 중... ${n}개 완료${fail ? `, ${fail}개 실패` : ''}`);
+      }
+    } finally { uploading = false; }
+    return { n, fail };
+  }
+  const needsUpload = (r) => !r.up.orig || (r.composite && !r.up.comp);
+  setInterval(() => { if (setting('업로드', '자동') === '자동') uploadPending(false); }, 60000);
+  window.addEventListener('online', () => { if (setting('업로드', '자동') === '자동') uploadPending(false); });
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fileName(rec, kind) {
+    const d = new Date(rec.takenAt);
+    const t = `${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    return `${rec.group}조_${rec.stationName}_${t}_${kind}.jpg`;
+  }
+
+  // ---------- 귀신 소재 ----------
+  async function loadAsset() {
+    asset = null;
+    const s = station();
+    if (!s) { assetState = '장소 미설정'; return; }
+    if (!window.GhostEngine) { assetState = '합성 엔진 없음'; return; }
+    try {
+      await GhostEngine.init({ base: './' });
+      asset = await GhostEngine.loadAsset('ghosts/' + s.id + '/');
+      assetState = '준비됨 ✅' + (s.ghost ? '' : ' (시트에서 귀신=아니오 → 학생 사진엔 안 나옴)');
+    } catch (e) {
+      assetState = s.ghost ? '⚠️ 소재 없음 — 이 장소가 배정된 조는 귀신이 안 나와요 (ghosts/' + s.id + '/)' : '없음 (귀신 없는 장소)';
+    }
+    const st = $('assetStatus'); if (st) st.textContent = '귀신 소재: ' + assetState;
+  }
+
+  // ---------- 학생 화면 ----------
+  async function renderHome() {
+    const s = station();
+    $('homeTitle').textContent = '📍 ' + s.name;
+    $('homeStation').textContent = s.name;
+    const doneGroups = new Set((await db.all().catch(() => [])).filter((r) => r.stationId === s.id).map((r) => r.group));
+    const grid = $('groupGrid'); grid.innerHTML = '';
+    const nums = cache.groupNums.length ? cache.groupNums : Array.from({ length: 10 }, (_, i) => i + 1);
+    nums.forEach((g) => {
+      const b = document.createElement('button');
+      b.className = 'gbtn' + (doneGroups.has(g) ? ' done' : '');
+      b.innerHTML = `${g}<small>조</small>`;
+      b.onclick = () => pickGroup(g);
+      grid.appendChild(b);
+    });
+  }
+  function pickGroup(g) {
+    cur.group = g;
+    $('confGroup').textContent = g + '조';
+    const m = roster && roster[g];
+    $('confNames').textContent = m ? m.map((x) => x.name).join(' · ') : '';
+    $('confStation').textContent = station().name;
+    show('scrConfirm');
+  }
+  function openMission() {
+    const s = station();
+    $('misStation').textContent = '📜 ' + s.name + ' 미션';
+    $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
+    $('misGroup').textContent = cur.group + '조';
+    show('scrMission');
+  }
+
+  // ---------- 카메라 ----------
+  async function openCamera(mode) {
+    camMode = mode;
+    $('camTop').textContent = mode === 'background' ? '빈 배경 촬영 — 사람이 없게 해 주세요'
+      : mode === 'test' ? '귀신 합성 시험 촬영' : `${cur.group}조 · ${station().name}`;
+    show('scrCamera');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+      const v = $('camVideo'); v.srcObject = stream; await v.play();
+    } catch (e) {
+      closeCamera();
+      toast('카메라를 열 수 없어요. 선생님께 알려 주세요.', 4000);
+      backFromCamera();
+    }
+  }
+  function closeCamera() {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = null; $('camVideo').srcObject = null;
+  }
+  function backFromCamera() {
+    if (camMode === 'student') show('scrMission'); else openAdmin('tools');
+  }
+  function grabFrame() {
+    const v = $('camVideo');
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext('2d').drawImage(v, 0, 0);
+    return c;
+  }
+  const canvasToBlob = (c, q) => new Promise((res) => c.toBlob(res, 'image/jpeg', q || 0.92));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let shooting = false;
+  async function shoot() {
+    if (shooting || !stream) return;
+    shooting = true;
+    try {
+      if ($('camTimer').checked && camMode === 'student') {
+        for (let i = 3; i > 0; i--) { $('camCount').textContent = i; await sleep(900); }
+        $('camCount').textContent = '';
+      }
+      const frame = grabFrame();
+      const fl = $('camFlash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60);
+      closeCamera();
+      if (camMode === 'background') await saveBackground(frame);
+      else if (camMode === 'test') await testComposite(frame);
+      else await saveStudentPhoto(frame);
+    } finally { shooting = false; }
+  }
+
+  async function compose(frame) {
+    if (!asset || !window.GhostEngine) return { blob: null, applied: false, reason: assetState };
+    try { return await GhostEngine.composite(frame, asset, { quality: 0.92 }); }
+    catch (e) { return { blob: null, applied: false, reason: 'error: ' + e.message }; }
+  }
+
+  async function saveStudentPhoto(frame) {
+    show('scrSaving');
+    const t0 = Date.now();
+    const s = station();
+    const original = await canvasToBlob(frame);
+    const wantGhost = s.ghost && ghostStationFor(cur.group) === s.id;
+    let composite = null, reason = wantGhost ? '' : 'not-assigned';
+    if (wantGhost) {
+      const r = await compose(frame);
+      if (r.applied && r.blob) composite = r.blob; else reason = r.reason || 'not-applied';
+    }
+    const rec = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      group: cur.group, stationId: s.id, stationName: s.name, takenAt: Date.now(),
+      original, composite, ghost: !!composite, reason, up: { orig: false, comp: false }
+    };
+    await db.put(rec);
+    cur.lastId = rec.id;
+    if (setting('업로드', '자동') === '자동') uploadPending(false);
+    const wait = 1800 - (Date.now() - t0); if (wait > 0) await sleep(wait); // 너무 빨리 끝나면 어색하므로 최소 대기
+    showResult(rec);
+  }
+
+  function showResult(rec) {
+    const s = station();
+    const mode = (s.reveal || setting('공개방식', '즉시')).trim();
+    const img = $('resPhoto');
+    if (img.src) URL.revokeObjectURL(img.src);
+    $('resGroup').textContent = rec.group + '조';
+    if (mode === '숨김') {
+      $('resPhotoBox').hidden = true;
+      $('resMsg').textContent = '📸 사진이 안전하게 저장됐어요! 나중에 선생님과 함께 봐요.';
+    } else {
+      $('resPhotoBox').hidden = false;
+      img.src = URL.createObjectURL(mode === '원본' ? rec.original : (rec.composite || rec.original));
+      $('resMsg').textContent = '사진이 저장됐어요';
+    }
+    $('resClue').hidden = !s.clue;
+    $('resClueText').textContent = s.clue || '';
+    show('scrResult');
+  }
+
+  async function saveBackground(frame) {
+    const s = station();
+    const blob = await canvasToBlob(frame, 0.95);
+    const name = `빈배경_${s ? s.id : 'unknown'}_${Date.now()}.jpg`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    let msg = '빈 배경을 다운로드 폴더에 저장했어요';
+    if (conf.apiUrl && conf.apiKey) {
+      try { await postFile('빈배경', name, blob); msg += ' + 드라이브 "빈배경" 폴더에 올렸어요'; }
+      catch (e) { msg += ' (드라이브 업로드 실패)'; }
+    }
+    openAdmin('tools'); toast(msg, 4000);
+  }
+
+  async function testComposite(frame) {
+    show('scrSaving');
+    const r = await compose(frame);
+    openAdmin('tools');
+    if (r.applied && r.blob) openModal(r.blob, `합성 성공 (${r.ms || '?'}ms)`);
+    else toast('합성 안 됨: ' + (r.reason || '알 수 없음'), 5000);
+  }
+
+  // ---------- 교사 모드 ----------
+  let tapCount = 0, tapTimer = null;
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-admin-tap]')) return;
+    tapCount++; clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
+    if (tapCount >= 5) { tapCount = 0; openPin(); }
+  });
+
+  let pinBuf = '';
+  function openPin() { pinBuf = ''; drawPin(); show('scrPin'); }
+  function drawPin() {
+    [...$('pinDots').children].forEach((d, i) => d.classList.toggle('f', i < pinBuf.length));
+  }
+  function buildPinPad() {
+    const pad = $('pinPad');
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].forEach((k) => {
+      const b = document.createElement('button'); b.textContent = k;
+      if (!k) b.style.visibility = 'hidden';
+      b.onclick = () => {
+        if (k === '⌫') pinBuf = pinBuf.slice(0, -1); else if (pinBuf.length < 4) pinBuf += k;
+        drawPin();
+        if (pinBuf.length === 4) {
+          if (pinBuf === String(setting('관리자PIN', DEFAULT_PIN))) openAdmin('conn');
+          else { toast('비밀번호가 틀렸어요'); pinBuf = ''; setTimeout(drawPin, 150); }
+        }
+      };
+      pad.appendChild(b);
+    });
+  }
+
+  function openAdmin(tab) {
+    show('scrAdmin');
+    $('inApiUrl').value = conf.apiUrl || '';
+    $('inApiKey').value = conf.apiKey || '';
+    if (cache.fetchedAt && !$('connStatus').classList.contains('ok')) {
+      setStatus('connStatus', `저장된 설정: ${cache.groupNums.length}개 조, 장소 ${cache.stations.length}곳 (${new Date(cache.fetchedAt).toLocaleString()})` + (roster ? '' : ' · 이름은 불러오기 후 표시'));
+    }
+    fillStations();
+    $('assetStatus').textContent = '귀신 소재: ' + assetState;
+    switchTab(tab || 'conn');
+  }
+  function fillStations() {
+    const sel = $('selStation'); sel.innerHTML = '<option value="">— 장소 선택 —</option>';
+    cache.stations.forEach((s) => {
+      const o = document.createElement('option'); o.value = s.id; o.textContent = `${s.name} (${s.id})${s.ghost ? ' 👻' : ''}`;
+      if (s.id === conf.stationId) o.selected = true; sel.appendChild(o);
+    });
+  }
+  function switchTab(name) {
+    document.querySelectorAll('#adminTabs .tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === name));
+    document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
+    if (name === 'ghost') renderGhostTable();
+    if (name === 'gallery') renderGallery();
+    if (name === 'tools') renderDiag();
+  }
+
+  function renderGhostTable() {
+    const nameOf = (id) => (cache.stations.find((s) => s.id === id) || {}).name || id;
+    const list = ghostStations();
+    if (!cache.groupNums.length) { $('ghostTable').innerHTML = '<p>먼저 명단을 불러오세요.</p>'; return; }
+    let h = `<p>귀신 장소 후보: ${list.length ? list.map(nameOf).join(', ') : '없음 (시트 장소 탭의 귀신=예)'}</p>`;
+    h += '<table class="t"><tr><th>조</th><th>귀신 장소</th><th>비고</th></tr>';
+    cache.groupNums.forEach((g) => {
+      const st = ghostStationFor(g);
+      const ex = cache.excluded.includes(g);
+      h += `<tr><td>${g}조</td><td>${st ? '👻 ' + nameOf(st) : '—'}</td><td>${ex ? '제외 (저학년 또는 귀신제외조)' : ''}</td></tr>`;
+    });
+    $('ghostTable').innerHTML = h + '</table>';
+  }
+
+  const thumbUrls = [];
+  async function renderGallery() {
+    thumbUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+    const recs = (await db.all()).sort((a, b) => b.takenAt - a.takenAt);
+    const pend = recs.filter(needsUpload).length;
+    setStatus('galStatus', `사진 ${recs.length}장 (수정본 ${recs.filter((r) => r.ghost).length}장) · 드라이브 대기 ${pend}장`);
+    const g = $('gallery'); g.innerHTML = '';
+    recs.forEach((r) => {
+      const u = URL.createObjectURL(r.composite || r.original); thumbUrls.push(u);
+      const d = document.createElement('div'); d.className = 'gitem';
+      const t = new Date(r.takenAt);
+      d.innerHTML = `<img src="${u}" alt=""><div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())}<br>` +
+        `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
+      d.onclick = () => openRecord(r);
+      g.appendChild(d);
+    });
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function openModal(blob, label, extraBtns) {
+    const img = $('modalImg'); if (img.src) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(blob);
+    const btns = $('modalBtns'); btns.innerHTML = '';
+    if (label) { const s = document.createElement('span'); s.className = 'hd-sub'; s.textContent = label; btns.appendChild(s); }
+    (extraBtns || []).forEach((b) => btns.appendChild(b));
+    const c = document.createElement('button'); c.className = 'btn sm'; c.textContent = '닫기';
+    c.onclick = () => { $('modal').hidden = true; }; btns.appendChild(c);
+    $('modal').hidden = false;
+  }
+  function openRecord(r) {
+    if (!r.composite) return openModal(r.original, `원본 · ${r.reason ? '귀신 없음(' + r.reason + ')' : ''}`);
+    const toggle = document.createElement('button'); toggle.className = 'btn sm ghost';
+    let showComp = true;
+    toggle.textContent = '원본 보기';
+    toggle.onclick = () => {
+      showComp = !showComp;
+      $('modalImg').src = URL.createObjectURL(showComp ? r.composite : r.original);
+      toggle.textContent = showComp ? '원본 보기' : '수정본 보기';
+    };
+    openModal(r.composite, '수정본', [toggle]);
+  }
+
+  async function exportZip() {
+    if (!window.JSZip) return toast('압축 기능을 불러오지 못했어요');
+    const recs = await db.all();
+    if (!recs.length) return toast('사진이 없어요');
+    setStatus('galStatus', '압축 파일 만드는 중...');
+    const zip = new JSZip();
+    recs.forEach((r) => {
+      zip.file('원본/' + fileName(r, '원본'), r.original);
+      if (r.composite) zip.file('수정본/' + fileName(r, '수정본'), r.composite);
+    });
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const a = document.createElement('a');
+    const st = station();
+    a.href = URL.createObjectURL(blob);
+    a.download = `할로윈사진_${st ? st.name : '태블릿'}_${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    setStatus('galStatus', `내보냄: ${recs.length}장 (원본/ 수정본/ 폴더로 구분)`, 'ok');
+  }
+
+  let wipeArmed = 0;
+  async function wipe() {
+    if (Date.now() - wipeArmed > 4000) {
+      wipeArmed = Date.now();
+      const recs = await db.all();
+      const pend = recs.filter(needsUpload).length;
+      return toast(`정말 지울까요? ${pend ? `드라이브에 안 올린 사진 ${pend}장도 사라져요. ` : ''}4초 안에 한 번 더 누르세요.`, 4000);
+    }
+    wipeArmed = 0;
+    await db.clear(); renderGallery(); toast('이 태블릿의 사진을 모두 지웠어요');
+  }
+
+  function renderDiag() {
+    const es = window.GhostEngine && GhostEngine.status ? GhostEngine.status() : null;
+    $('diag').innerHTML = [
+      `장소: ${station() ? esc(station().name) : '미설정'}`,
+      `귀신 소재: ${esc(assetState)}`,
+      `합성 엔진: ${es ? (es.ready ? '준비됨' : '준비 안 됨') + (es.segmentation ? ' · 인물 분할 사용' : ' · 인물 분할 없음') + (es.error ? ' · ' + esc(es.error) : '') : '없음'}`,
+      `명단: ${roster ? '불러옴(메모리)' : '없음 — 이름 표시 안 됨'}`,
+      `인터넷: ${navigator.onLine ? '연결됨' : '끊김'}`,
+      `저장 공간: <span id="diagQuota">확인 중</span>`
+    ].join('<br>');
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then((q) => {
+        const el = $('diagQuota'); if (el) el.textContent = `${(q.usage / 1e6).toFixed(0)}MB 사용 / ${(q.quota / 1e6).toFixed(0)}MB 가능`;
+      });
+    }
+  }
+
+  async function startStudent() {
+    if (!station()) return toast('장소를 먼저 고르세요');
+    try { await document.documentElement.requestFullscreen(); } catch (e) {}
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    goHome();
+  }
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && wakeLock !== null) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
+  });
+
+  // ---------- 이벤트 연결 ----------
+  function bind() {
+    document.querySelectorAll('[data-go="home"]').forEach((b) => { b.onclick = goHome; });
+    $('btnSetupAdmin').onclick = openPin;
+    $('btnConfirmYes').onclick = openMission;
+    $('btnOpenCam').onclick = () => openCamera('student');
+    $('btnShutter').onclick = shoot;
+    $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };
+    $('btnRetake').onclick = () => openCamera('student');
+    $('btnDone').onclick = goHome;
+    $('btnPinCancel').onclick = goHome;
+    $('btnAdminExit').onclick = goHome;
+    $('adminTabs').onclick = (e) => { const t = e.target.closest('.tab'); if (t) switchTab(t.dataset.tab); };
+    $('btnLoadRoster').onclick = async () => {
+      conf.apiUrl = $('inApiUrl').value.trim(); conf.apiKey = $('inApiKey').value.trim(); writeLS(LS_CONF, conf);
+      setStatus('connStatus', '불러오는 중...');
+      if (await loadRoster(false)) { fillStations(); await loadAsset(); }
+    };
+    $('selStation').onchange = async (e) => {
+      conf.stationId = e.target.value; writeLS(LS_CONF, conf);
+      $('assetStatus').textContent = '귀신 소재: 확인 중...';
+      await loadAsset();
+    };
+    $('btnStartStudent').onclick = startStudent;
+    $('btnUploadAll').onclick = async () => {
+      if (!conf.apiUrl) return toast('먼저 구글 시트를 연결하세요');
+      if (!navigator.onLine) return toast('인터넷이 끊겨 있어요');
+      const r = await uploadPending(true);
+      await renderGallery();
+      if (r) toast(`드라이브에 ${r.n}개 파일을 올렸어요${r.fail ? ` (실패 ${r.fail})` : ''}`);
+    };
+    $('btnZip').onclick = exportZip;
+    $('btnWipe').onclick = wipe;
+    $('btnBgShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('background'); };
+    $('btnTestShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('test'); };
+  }
+
+  // ---------- 시작 ----------
+  async function boot() {
+    bind();
+    buildPinPad();
+    goHome();
+    await loadRoster(true);   // 이름은 메모리로만. 실패하면 저장된 설정(이름 없음)으로 진행
+    await loadAsset();
+    if (!$('scrHome').hidden) renderHome();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>🎃 할로윈 방탈출</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#120d21;--ink:#efe6cf;--gold:#ffcf7a;--gold-lt:#ffe9b8;--lilac:#c9b9e8;--green:#9ce6b4;--red:#ff8fa0;
+  --stone-1:rgba(58,40,96,.92);--stone-2:rgba(34,23,62,.94);--stone-bd:rgba(255,205,130,.4);
+  --parch-1:rgba(236,220,180,.97);--parch-2:rgba(214,193,146,.97);--brown:#3f2c14;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:radial-gradient(ellipse at 50% 0%,#2a1d4a 0%,var(--bg) 60%);background-attachment:fixed;color:var(--ink);
+  font-family:'Nanum Gothic','Malgun Gothic',sans-serif;line-height:1.5;overflow-x:hidden;user-select:none;-webkit-user-select:none}
+h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
+[hidden]{display:none!important}
+.screen{min-height:100vh;display:flex;flex-direction:column}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(180deg,#1b1430,#120d21);
+  border-bottom:2px solid rgba(255,205,130,.35);box-shadow:0 2px 16px rgba(0,0,0,.6)}
+.hd-title{font-family:'Nanum Myeongjo',serif;font-size:20px;font-weight:800;color:var(--gold-lt);text-shadow:0 2px 6px rgba(0,0,0,.7)}
+.hd-sub{font-size:13px;color:var(--lilac)}
+.wrap{width:100%;max-width:860px;margin:0 auto;padding:20px 18px 40px;flex:1}
+.card{background:linear-gradient(180deg,var(--stone-1),var(--stone-2));border:1.5px solid var(--stone-bd);border-radius:16px;padding:22px;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);margin-bottom:16px}
+.parch{background:linear-gradient(180deg,var(--parch-1),var(--parch-2));color:var(--brown);border:2px solid #8a6a3a;border-radius:14px;padding:24px;
+  box-shadow:0 10px 30px rgba(0,0,0,.55),inset 0 0 40px rgba(120,80,30,.25)}
+.big-title{font-size:34px;color:var(--gold-lt);text-align:center;margin:10px 0 6px;text-shadow:0 3px 12px rgba(0,0,0,.8)}
+.lead{text-align:center;color:var(--lilac);font-size:17px;margin-bottom:22px}
+.btn{border:none;border-radius:12px;cursor:pointer;font-family:inherit;font-weight:800;font-size:18px;padding:14px 22px;
+  background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;box-shadow:0 4px 0 #9b6420,0 6px 16px rgba(0,0,0,.4);transition:transform .08s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #9b6420}
+.btn.ghost{background:rgba(255,255,255,.08);color:var(--ink);box-shadow:none;border:1.5px solid rgba(255,255,255,.25)}
+.btn.danger{background:linear-gradient(180deg,#ff9aa8,#d9506a);color:#fff;box-shadow:0 4px 0 #8c2638}
+.btn.sm{font-size:14px;padding:9px 14px;border-radius:10px}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.45}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.center{justify-content:center}
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:14px}
+.gbtn{aspect-ratio:1;border-radius:18px;border:2px solid var(--stone-bd);background:linear-gradient(180deg,var(--stone-1),var(--stone-2));
+  color:var(--gold-lt);font-family:'Nanum Myeongjo',serif;font-size:30px;font-weight:800;cursor:pointer;position:relative;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.gbtn small{display:block;font-family:'Nanum Gothic',sans-serif;font-size:14px;color:var(--lilac);font-weight:700}
+.gbtn.done::after{content:'✅';position:absolute;top:6px;right:8px;font-size:20px}
+.mission-text{font-size:24px;font-weight:800;line-height:1.6;text-align:center;white-space:pre-wrap}
+.names{text-align:center;font-size:22px;font-weight:800;color:var(--gold-lt);margin:14px 0}
+/* camera */
+#scrCamera{background:#000;position:fixed;inset:0;min-height:0;z-index:20}
+#camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.cam-bar{position:absolute;left:0;right:0;bottom:0;padding:18px calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;justify-content:space-between;background:linear-gradient(0deg,rgba(0,0,0,.7),transparent)}
+.cam-top{position:absolute;left:0;right:0;top:0;padding:14px 18px;color:#fff;font-weight:800;font-size:18px;text-shadow:0 2px 6px #000;
+  background:linear-gradient(180deg,rgba(0,0,0,.6),transparent)}
+.shutter{width:84px;height:84px;border-radius:50%;border:6px solid #fff;background:rgba(255,255,255,.25);cursor:pointer}
+.shutter:active{background:#fff}
+.countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:160px;font-weight:800;color:#fff;
+  text-shadow:0 6px 30px #000;pointer-events:none}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.flash.on{opacity:.9;transition:none}
+/* result */
+.photo-box{width:fit-content;max-width:100%;margin:0 auto;border-radius:12px;overflow:hidden;background:#000;border:3px solid #fff;box-shadow:0 10px 30px rgba(0,0,0,.6);transform:rotate(-1deg)}
+.photo-box img{display:block;max-width:100%;max-height:58vh;width:auto;height:auto}
+.clue{max-width:640px;margin:22px auto 0;padding:14px 20px}
+.clue-label{text-align:center;font-weight:800;font-size:15px;color:#7a5a24;margin-bottom:2px}
+.clue .mission-text{font-size:20px}
+.spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:30px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* admin */
+#scrAdmin{background:#14161c;color:#e8eaf0;font-family:'Nanum Gothic','Malgun Gothic',sans-serif}
+#scrAdmin .hd{background:#1d2028;border-bottom:1px solid #333}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{padding:9px 14px;border-radius:9px;background:#252935;color:#bbc;border:none;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer}
+.tab.on{background:#ffcf7a;color:#2a1a00}
+.panel{background:#1d2028;border:1px solid #2e3240;border-radius:12px;padding:18px;margin-bottom:14px}
+.panel h3{font-family:inherit;font-size:17px;margin-bottom:10px;color:#fff}
+.panel p,.help{font-size:14px;color:#a9aec0;margin-bottom:8px}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:13px;color:#a9aec0;margin-bottom:4px}
+.field input,.field select{width:100%;padding:11px 12px;border-radius:9px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:16px;font-family:inherit;user-select:text;-webkit-user-select:text}
+.status{font-size:14px;padding:8px 12px;border-radius:8px;background:#252935;margin-top:8px}
+.status.ok{background:#173524;color:#9ce6b4}.status.err{background:#3d1820;color:#ff9aa8}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align:left}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.gitem{background:#0f1116;border:1px solid #2e3240;border-radius:10px;overflow:hidden;cursor:pointer}
+.gitem img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000}
+.gitem div{padding:6px 8px;font-size:12px;color:#c3c7d4}
+.badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700;background:#333;margin-right:3px}
+.badge.g{background:#5b2a7a;color:#f0d8ff}.badge.u{background:#173524;color:#9ce6b4}.badge.w{background:#4a3a12;color:#ffd98f}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:20px 0}
+.pin-dots i{width:18px;height:18px;border-radius:50%;border:2px solid var(--gold);display:block}
+.pin-dots i.f{background:var(--gold)}
+.pinpad{display:grid;grid-template-columns:repeat(3,90px);gap:12px;justify-content:center}
+.pinpad button{height:70px;border-radius:14px;border:1px solid var(--stone-bd);background:var(--stone-2);color:var(--ink);font-size:28px;font-weight:800;font-family:inherit}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
+.modal img{max-width:100%;max-height:78vh;border-radius:8px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:10px;z-index:60;font-size:15px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+
+<!-- 준비 안 됨 -->
+<section class="screen" id="scrSetup" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div></header>
+  <div class="wrap">
+    <div class="card" style="text-align:center">
+      <h2 style="margin-bottom:10px">선생님 설정이 필요해요</h2>
+      <p class="lead" style="margin-bottom:16px">이 태블릿의 장소가 아직 정해지지 않았어요.</p>
+      <button class="btn" id="btnSetupAdmin">교사 모드 열기</button>
+    </div>
+  </div>
+</section>
+
+<!-- 조 선택 -->
+<section class="screen" id="scrHome" hidden>
+  <header class="hd">
+    <div><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="homeStation"></div></div>
+    <div class="hd-sub">👻 유령 학교의 미션</div>
+  </header>
+  <div class="wrap">
+    <h1 class="big-title" id="homeTitle">미션 장소</h1>
+    <p class="lead">우리 조 번호를 눌러 주세요</p>
+    <div class="groups" id="groupGrid"></div>
+  </div>
+</section>
+
+<!-- 조 확인 -->
+<section class="screen" id="scrConfirm" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="confStation"></div></header>
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="card" style="text-align:center">
+      <h2 class="big-title" id="confGroup">1조</h2>
+      <div class="names" id="confNames"></div>
+      <p class="lead">우리 조가 맞나요?</p>
+      <div class="row center">
+        <button class="btn ghost" data-go="home">아니에요</button>
+        <button class="btn" id="btnConfirmYes">맞아요! 미션 보기</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 미션 -->
+<section class="screen" id="scrMission" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="misGroup"></div></header>
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
+    <h2 class="big-title" id="misStation">📜 미션</h2>
+    <div class="parch" style="margin:14px 0 22px"><div class="mission-text" id="misText"></div></div>
+    <p class="lead">미션을 성공한 순간을 사진으로 남겨요!</p>
+    <div class="row center">
+      <button class="btn ghost" data-go="home">처음으로</button>
+      <button class="btn" id="btnOpenCam">📸 사진 찍으러 가기</button>
+    </div>
+  </div>
+</section>
+
+<!-- 카메라 -->
+<section class="screen" id="scrCamera" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="cam-top" id="camTop"></div>
+  <div class="countdown" id="camCount"></div>
+  <div class="flash" id="camFlash"></div>
+  <div class="cam-bar">
+    <button class="btn ghost sm" id="btnCamCancel">돌아가기</button>
+    <button class="shutter" id="btnShutter" aria-label="사진 찍기"></button>
+    <label class="hd-sub" style="display:flex;align-items:center;gap:6px;color:#fff"><input type="checkbox" id="camTimer" checked> 3초 타이머</label>
+  </div>
+</section>
+
+<!-- 저장 중 -->
+<section class="screen" id="scrSaving" hidden>
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div class="spinner"></div>
+    <h2 class="big-title" style="font-size:26px">사진을 저장하고 있어요...</h2>
+  </div>
+</section>
+
+<!-- 결과 -->
+<section class="screen" id="scrResult" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="resGroup"></div></header>
+  <div class="wrap">
+    <h2 class="big-title">🎉 미션 성공!</h2>
+    <p class="lead" id="resMsg">사진이 저장됐어요</p>
+    <div class="photo-box" id="resPhotoBox"><img id="resPhoto" alt="찍은 사진"></div>
+    <div class="parch clue" id="resClue" hidden><div class="clue-label">🔑 단서</div><div class="mission-text" id="resClueText"></div></div>
+    <div class="row center" style="margin-top:26px">
+      <button class="btn ghost" id="btnRetake">🔄 다시 찍기</button>
+      <button class="btn" id="btnDone">✅ 미션 완료</button>
+    </div>
+  </div>
+</section>
+
+<!-- PIN -->
+<section class="screen" id="scrPin" hidden>
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <h2 style="color:var(--gold-lt)">교사 모드</h2>
+    <div class="pin-dots" id="pinDots"><i></i><i></i><i></i><i></i></div>
+    <div class="pinpad" id="pinPad"></div>
+    <div style="margin-top:18px"><button class="btn ghost sm" id="btnPinCancel">취소</button></div>
+  </div>
+</section>
+
+<!-- 교사 모드 -->
+<section class="screen" id="scrAdmin" hidden>
+  <header class="hd"><div class="hd-title" style="color:#fff">🔧 교사 모드</div>
+    <button class="btn sm" id="btnAdminExit">학생 화면으로</button></header>
+  <div class="wrap">
+    <div class="tabs" id="adminTabs">
+      <button class="tab on" data-tab="conn">연결·장소</button>
+      <button class="tab" data-tab="ghost">귀신 배정</button>
+      <button class="tab" data-tab="gallery">사진함</button>
+      <button class="tab" data-tab="tools">도구</button>
+    </div>
+
+    <div data-pane="conn">
+      <div class="panel">
+        <h3>① 구글 시트 연결</h3>
+        <p>apps-script/설치방법.md 대로 만든 웹 앱 주소와 비밀 키를 넣으세요. 학생 이름은 이 태블릿에 저장되지 않습니다.</p>
+        <label class="field"><span>웹 앱 URL</span><input id="inApiUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></label>
+        <label class="field"><span>비밀 키</span><input id="inApiKey" autocomplete="off"></label>
+        <button class="btn sm" id="btnLoadRoster">명단·설정 불러오기</button>
+        <div class="status" id="connStatus">연결 안 됨</div>
+      </div>
+      <div class="panel">
+        <h3>② 이 태블릿의 장소</h3>
+        <label class="field"><span>장소</span><select id="selStation"></select></label>
+        <div class="status" id="assetStatus">귀신 소재: 확인 전</div>
+      </div>
+      <div class="panel">
+        <h3>③ 시작</h3>
+        <p>전체 화면으로 학생 화면을 엽니다. 교사 모드로 돌아오려면 제목(🎃 할로윈 방탈출)을 빠르게 5번 누르세요.</p>
+        <button class="btn" id="btnStartStudent">학생 화면 시작 (전체 화면)</button>
+      </div>
+    </div>
+
+    <div data-pane="ghost" hidden>
+      <div class="panel">
+        <h3>조별 귀신 등장 장소</h3>
+        <p>귀신은 조마다 <b>딱 한 장소</b>에서 나옵니다. 장소는 시트 설정의 "귀신시드"로 정해지며, 모든 태블릿이 같은 결과를 냅니다.
+          제외학년 학생이 있는 조와 귀신제외조는 나오지 않습니다. 다시 섞으려면 시트의 귀신시드 값을 바꾸고 모든 태블릿에서 "불러오기"를 하세요.</p>
+        <div id="ghostTable"></div>
+      </div>
+    </div>
+
+    <div data-pane="gallery" hidden>
+      <div class="panel">
+        <h3>사진함 (이 태블릿)</h3>
+        <div class="row" style="margin-bottom:12px">
+          <button class="btn sm" id="btnUploadAll">☁️ 드라이브로 올리기</button>
+          <button class="btn sm" id="btnZip">📦 압축 파일로 내보내기</button>
+          <button class="btn sm danger" id="btnWipe">🗑 전체 삭제</button>
+        </div>
+        <div class="status" id="galStatus"></div>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+
+    <div data-pane="tools" hidden>
+      <div class="panel">
+        <h3>빈 배경 촬영 (귀신 소재 만들기 1단계)</h3>
+        <p>태블릿을 행사 때와 똑같이 고정한 뒤, 사람이 없는 상태로 찍으세요. 사진은 드라이브 "빈배경" 폴더(연결된 경우)와 이 기기 다운로드 폴더에 저장됩니다.
+          그 사진을 이미지 생성 AI에 올려 귀신을 그려 넣은 뒤 ghost-maker.html 로 귀신 소재를 만듭니다.</p>
+        <button class="btn sm" id="btnBgShot">📷 빈 배경 찍기</button>
+      </div>
+      <div class="panel">
+        <h3>귀신 합성 시험</h3>
+        <p>이 장소의 귀신을 무조건 넣어서 한 장 찍어 봅니다. 사진함에 저장되지 않습니다.</p>
+        <button class="btn sm" id="btnTestShot">👻 시험 촬영</button>
+      </div>
+      <div class="panel">
+        <h3>상태</h3>
+        <div id="diag" class="help"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="modal" hidden>
+  <img id="modalImg" alt="">
+  <div class="row center" style="margin-top:12px" id="modalBtns"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/jszip/jszip.min.js" defer></script>
+<script src="js/ghost-engine.js" defer></script>
+<script src="js/app.js" defer></script>
+</body>
+</html>
