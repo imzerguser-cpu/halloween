@@ -2,6 +2,9 @@
 (function () {
   'use strict';
   const cache = new Map();
+  const editScriptURL = document.currentScript && document.currentScript.src;
+  let editLibrary;
+  const loadEditLibrary = () => editLibrary || (editLibrary = import(new URL('../vendor/mediabunny/mediabunny-1.61.3.min.mjs', editScriptURL || new URL('js/ghost-engine.js', location.href)).href).catch(e => { editLibrary = null; throw e; }));
   let state = { ready: false, segmentation: false }, initializing, worker, sequence = 0;
   const pending = new Map();
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -372,5 +375,257 @@
       cleanup(); throw e;
     }
   }
-  window.GhostEngine = { init, status, loadAsset, composite, startVideo, videoSupport, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause } };
+  function editSupport() {
+    const webcodecs = typeof VideoDecoder !== 'undefined' && typeof VideoEncoder !== 'undefined';
+    const realtime = videoSupport().ok && typeof HTMLVideoElement !== 'undefined' &&
+      !!(HTMLVideoElement.prototype.captureStream || HTMLVideoElement.prototype.mozCaptureStream);
+    return { webcodecs, realtime, ...(!webcodecs && !realtime ? { reason: 'video-edit-unavailable' } : {}) };
+  }
+
+  // One low-resolution image and scalar clear intervals, never a collection of decoded frames.
+  function editAnalysis(asset, width, height, range, duration) {
+    if (Math.abs(width / height / (asset.meta.width / asset.meta.height) - 1) > .025) throw Error('aspect-ratio-mismatch');
+    const w = 192, h = Math.max(32, Math.round(w * height / width));
+    const probe = canvas(w, h), ctx = probe.getContext('2d', { willReadFrequently: true });
+    let registration, background, reference, box, previous, lastAlign = -Infinity, clearStart = null, lastEnd = 0;
+    const runs = [];
+    function clear(image) {
+      ctx.drawImage(image, 0, 0, w, h);
+      const current = ctx.getImageData(0, 0, w, h).data, ratios = [[], [], []];
+      for (let y = 2; y < h - 2; y += 4) for (let x = 2; x < w - 2; x += 4) {
+        if (x >= box[0] - 3 && x <= box[0] + box[2] + 3 && y >= box[1] - 3 && y <= box[1] + box[3] + 3) continue;
+        const i = (y * w + x) * 4;
+        for (let k = 0; k < 3; k++) if (reference[i + k] > 20 && reference[i + k] < 235) ratios[k].push(current[i + k] / reference[i + k]);
+      }
+      const gain = ratios.map(a => clamp(a.length ? median(a) : 1, .65, 1.45));
+      let changed = 0, count = 0;
+      for (let y = Math.max(0, Math.floor(box[1] - 3)); y < Math.min(h, box[1] + box[3] + 3); y++) for (let x = Math.max(0, Math.floor(box[0] - 3)); x < Math.min(w, box[0] + box[2] + 3); x++) {
+        const i = (y * w + x) * 4; count++;
+        if (Math.max(...gain.map((v, k) => Math.abs(current[i + k] - reference[i + k] * v))) > 22) changed++;
+      }
+      return count > 0 && changed / count <= .015;
+    }
+    function closeRun() { if (clearStart !== null) runs.push([clearStart, lastEnd]); clearStart = null; }
+    return {
+      async inspect(image, time, end) {
+        ctx.drawImage(image, 0, 0, w, h);
+        const current = ctx.getImageData(0, 0, w, h).data;
+        let edges = 0, changedEdges = 0;
+        if (previous) for (let y = 3; y < h - 3; y += 3) for (let x = 3; x < w - 3; x += 3) {
+          if (box && x >= box[0] - 3 && x <= box[0] + box[2] + 3 && y >= box[1] - 3 && y <= box[1] + box[3] + 3) continue;
+          const i = (y * w + x) * 4;
+          const gx = luma(previous, i + 4) - luma(previous, i - 4), gy = luma(previous, i + w * 4) - luma(previous, i - w * 4);
+          if (Math.abs(gx) + Math.abs(gy) < 6) continue;
+          edges++;
+          if (Math.abs(gx - luma(current, i + 4) + luma(current, i - 4)) + Math.abs(gy - luma(current, i + w * 4) + luma(current, i - w * 4)) > 25) changedEdges++;
+        }
+        previous = current;
+        if (time - lastAlign >= .5 || !registration || (edges > 30 && changedEdges / edges > .3)) {
+          const r = await align(asset.background, probe, asset.meta.bbox, null); lastAlign = time;
+          if (r.boundary || r.score > 18 || (registration && (Math.abs(r.dx - registration.dx) > 1 || Math.abs(r.dy - registration.dy) > 1))) throw Error('camera-moved');
+          if (!registration) {
+            registration = r; background = canvas(w, h);
+            background.getContext('2d').drawImage(asset.background, r.dx, r.dy, w, h);
+            reference = pixels(background).data;
+            const b = asset.meta.bbox;
+            box = [b[0] * w / asset.meta.width + r.dx, b[1] * h / asset.meta.height + r.dy, b[2] * w / asset.meta.width, b[3] * h / asset.meta.height];
+            if (box[0] < 0 || box[1] < 0 || box[0] + box[2] > w || box[1] + box[3] > h) throw Error('ghost-out-of-frame');
+          }
+        }
+        if (time > lastEnd + .15) closeRun();
+        if (clear(image)) { if (clearStart === null) clearStart = time; } else closeRun();
+        lastEnd = end;
+      },
+      choose() {
+        closeRun();
+        const candidates = runs.map(([a, b]) => [Math.max(a, range[0]), Math.min(b - duration, range[1])]).filter(([a, b]) => b >= a);
+        if (!candidates.length) throw Error('ghost-space-never-clear');
+        const c = candidates[Math.floor(Math.random() * candidates.length)];
+        return c[0] + Math.random() * (c[1] - c[0]);
+      },
+      clear,
+      layer(image, outWidth, outHeight) {
+        const bg = canvas(outWidth, outHeight), raw = canvas(outWidth, outHeight);
+        const dx = registration.dx * outWidth / w, dy = registration.dy * outHeight / h;
+        bg.getContext('2d').drawImage(asset.background, dx, dy, outWidth, outHeight);
+        raw.getContext('2d').drawImage(asset.ghost, dx, dy, outWidth, outHeight);
+        const tuning = fit(bg, image, raw, null), data = pixels(raw); let seed = 123456789;
+        for (let i = 0; i < data.data.length; i += 4) if (data.data[i + 3]) {
+          seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+          const noise = ((seed >>> 0) / 4294967296 - .5) * tuning.noise * 3.46;
+          for (let k = 0; k < 3; k++) data.data[i + k] = clamp(data.data[i + k] * tuning.gain[k] + noise, 0, 255);
+        }
+        raw.getContext('2d').putImageData(data, 0, 0);
+        const softened = canvas(outWidth, outHeight), sc = softened.getContext('2d');
+        sc.filter = `blur(${tuning.blur}px)`; sc.drawImage(raw, 0, 0); return softened;
+      }
+    };
+  }
+  function editPainter(analysis, w, h, at, duration) {
+    const surface = canvas(w, h), ctx = surface.getContext('2d'); let layer, frames = 0;
+    return { surface, get frames() { return frames; }, paint(image, time) {
+      ctx.drawImage(image, 0, 0, w, h);
+      const age = time - at;
+      if (age >= 0 && age < duration) {
+        if (!analysis.clear(image)) throw Error('ghost-space-occupied');
+        if (!layer) layer = analysis.layer(surface, w, h);
+        ctx.save(); ctx.globalAlpha = clamp(Math.min(age / .12, (duration - age) / .16), 0, 1);
+        ctx.drawImage(layer, 0, 0); ctx.restore(); frames++;
+      }
+    } };
+  }
+  const editSemanticError = e => /^(camera-moved|aspect-ratio-mismatch|ghost-out-of-frame|ghost-space-|invalid-|video-too-|no-video)/.test(e.message);
+
+  async function editFast(blob, asset, options, progress) {
+    const M = await loadEditLibrary(), input = new M.Input({ source: new M.BlobSource(blob), formats: M.ALL_FORMATS });
+    let output;
+    try {
+      const video = await input.getPrimaryVideoTrack(); if (!video) throw Error('no-video-track');
+      const end = await video.computeDuration(), start = await video.getFirstTimestamp(), length = end - start;
+      if (!Number.isFinite(length) || length <= 0 || length > 61) throw Error('video-too-long-or-invalid');
+      const w = video.displayWidth, h = video.displayHeight;
+      if (w * h > 2560 * 1440) throw Error('video-too-large');
+      const analysis = editAnalysis(asset, w, h, options.range.map(t => t + start), options.duration);
+      const scan = new M.CanvasSink(video, { width: 192, height: Math.max(32, Math.round(192 * h / w)), poolSize: 1 });
+      let scanned = 0;
+      for await (const frame of scan.canvases()) {
+        await analysis.inspect(frame.canvas, frame.timestamp, frame.timestamp + frame.duration); scanned++;
+        progress(.4 * clamp((frame.timestamp - start) / length, 0, 1));
+      }
+      const at = analysis.choose(), audioTracks = await input.getAudioTracks();
+      const audio = await Promise.all(audioTracks.map(async track => ({ track, codec: await track.getCodec(), config: await track.getDecoderConfig() })));
+      const mp4 = audio.every(a => a.codec === 'aac' || a.codec === 'mp3');
+      const format = mp4 ? new M.Mp4OutputFormat({ fastStart: 'in-memory' }) : new M.WebMOutputFormat();
+      if (audio.some(a => !a.config || !format.getSupportedAudioCodecs().includes(a.codec))) throw Error('audio-copy-codec-unavailable');
+      const codec = mp4 ? 'avc' : 'vp8';
+      const bitrate = clamp(blob.size * 8 / length, 2000000, 8000000);
+      if (!await M.canEncodeVideo(codec, { width: w, height: h, bitrate })) throw Error('video-encoder-unavailable');
+      const painter = editPainter(analysis, w, h, at, options.duration), target = new M.BufferTarget();
+      output = new M.Output({ format, target });
+      const source = new M.CanvasSource(painter.surface, { codec, bitrate, keyFrameInterval: 2, latencyMode: 'realtime', hardwareAcceleration: 'no-preference' });
+      output.addVideoTrack(source);
+      for (const a of audio) { a.source = new M.EncodedAudioPacketSource(a.codec); output.addAudioTrack(a.source); }
+      await output.start();
+      // Await each encoder submission: bounded decoder/encoder queues and native frame disposal.
+      const sink = new M.CanvasSink(video, { poolSize: 1 }); let frames = 0;
+      for await (const frame of sink.canvases()) {
+        painter.paint(frame.canvas, frame.timestamp);
+        await source.add(frame.timestamp, frame.duration); frames++;
+        progress(.4 + .5 * clamp((frame.timestamp - start) / length, 0, 1));
+      }
+      source.close();
+      let audioPackets = 0;
+      for (const a of audio) {
+        for await (const packet of new M.EncodedPacketSink(a.track).packets()) {
+          await a.source.add(packet, { decoderConfig: a.config }); audioPackets++;
+        }
+        a.source.close();
+      }
+      if (!painter.frames) throw Error('ghost-space-not-rendered');
+      await output.finalize();
+      const mime = mp4 ? 'video/mp4' : 'video/webm';
+      return { blob: new Blob([target.buffer], { type: mime }), mime, ext: mp4 ? 'mp4' : 'webm', applied: true, ghostAtMs: Math.round((at - start) * 1000),
+        stats: { width: w, height: h, durationMs: Math.round(length * 1000), frames, scanned, compositeFrames: painter.frames, audioTracks: audio.length, audioPackets, audio: 'packet-copy', bitrate, reencodedVideo: true, alignmentIntervalMs: 500 } };
+    } catch (e) { if (output) { try { await output.cancel(); } catch (_) {} } throw e; }
+    finally { input.dispose(); }
+  }
+
+  function videoEvent(video, event, action, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      const clean = () => { clearTimeout(timer); video.removeEventListener(event, ok); video.removeEventListener('error', bad); };
+      const ok = () => { clean(); resolve(); }, bad = () => { clean(); reject(Error('video-decode-error')); };
+      const timer = setTimeout(() => { clean(); reject(Error('video-' + event + '-timeout')); }, timeout);
+      video.addEventListener(event, ok, { once: true }); video.addEventListener('error', bad, { once: true });
+      try { action(); } catch (e) { clean(); reject(e); }
+    });
+  }
+  async function editRealtime(blob, asset, options, progress) {
+    const video = document.createElement('video'), url = URL.createObjectURL(blob), tracks = [];
+    let recorder, timer, frameId, failure;
+    video.muted = true; video.playsInline = true; video.preload = 'auto';
+    const seek = async time => { if (Math.abs(video.currentTime - time) > .001) await videoEvent(video, 'seeked', () => { video.currentTime = time; }); };
+    try {
+      await videoEvent(video, 'loadeddata', () => { video.src = url; });
+      if (!Number.isFinite(video.duration)) { await seek(1e10); await seek(0); }
+      const length = video.duration;
+      if (!Number.isFinite(length) || length <= 0 || length > 61) throw Error('video-too-long-or-invalid');
+      const w = video.videoWidth, h = video.videoHeight;
+      if (w * h > 2560 * 1440) throw Error('video-too-large');
+      const analysis = editAnalysis(asset, w, h, options.range, options.duration);
+      for (let t = 0; t < length; t += .1) {
+        await seek(t); await analysis.inspect(video, t, Math.min(t + .1, length)); progress(.4 * t / length);
+      }
+      const at = analysis.choose(), painter = editPainter(analysis, w, h, at, options.duration);
+      await seek(0); painter.paint(video, 0);
+      const captured = (video.captureStream || video.mozCaptureStream).call(video); tracks.push(...captured.getTracks());
+      // Muting the element prevents speaker playback; captureStream keeps its audio content.
+      await video.play(); video.pause(); await seek(0);
+      const audio = captured.getAudioTracks(); tracks.push(...audio.filter(t => !tracks.includes(t)));
+      // Never silently deliver a muted result if the browser has failed to expose the input audio.
+      try {
+        const M = await loadEditLibrary(), input = new M.Input({ source: new M.BlobSource(blob), formats: M.ALL_FORMATS });
+        try { if ((await input.getAudioTracks()).length && !audio.length) throw Error('audio-capture-unavailable'); }
+        finally { input.dispose(); }
+      } catch (e) { if (e.message === 'audio-capture-unavailable') throw e; }
+      const stream = painter.surface.captureStream(30); tracks.push(...stream.getTracks()); audio.forEach(t => stream.addTrack(t));
+      const support = videoSupport(), chunks = [];
+      recorder = new MediaRecorder(stream, { mimeType: support.recorderMime, videoBitsPerSecond: clamp(blob.size * 8 / length, 2000000, 8000000), audioBitsPerSecond: 128000 });
+      const done = new Promise((resolve, reject) => {
+        recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        recorder.onerror = () => { failure = Error('media-recorder-error'); reject(failure); if (recorder.state !== 'inactive') recorder.stop(); };
+        recorder.onstop = () => failure ? reject(failure) : resolve(new Blob(chunks, { type: recorder.mimeType }));
+      });
+      const stop = () => { if (recorder.state !== 'inactive') recorder.stop(); };
+      const interrupted = () => { if (document.hidden) { failure = Error('document-hidden'); stop(); } };
+      document.addEventListener('visibilitychange', interrupted);
+      video.onended = stop;
+      const tick = () => {
+        if (recorder.state === 'inactive') return;
+        try { painter.paint(video, video.currentTime); progress(.4 + .55 * video.currentTime / length); }
+        catch (e) { failure = e; stop(); return; }
+        if (video.requestVideoFrameCallback) frameId = video.requestVideoFrameCallback(tick);
+        else timer = setTimeout(tick, 1000 / 30);
+      };
+      let watchdog;
+      try {
+        recorder.start(1000);
+        watchdog = setTimeout(() => { failure = Error('realtime-playback-timeout'); stop(); }, length * 1000 + 15000);
+        try { await video.play(); tick(); } catch (e) { failure = e; stop(); }
+        const result = await done;
+        if (!result.size || !painter.frames) throw Error('ghost-space-not-rendered');
+        return { blob: result, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', applied: true, ghostAtMs: Math.round(at * 1000),
+          stats: { width: w, height: h, durationMs: Math.round(length * 1000), compositeFrames: painter.frames, audioTracks: audio.length, audio: 'capture-stream-reencoded', scanIntervalMs: 100, alignmentIntervalMs: 500 } };
+      } finally { clearTimeout(watchdog); document.removeEventListener('visibilitychange', interrupted); }
+    } finally {
+      clearTimeout(timer); if (frameId !== undefined) video.cancelVideoFrameCallback(frameId);
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      video.pause(); tracks.forEach(t => t.stop()); video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url);
+    }
+  }
+  async function editVideo(blob, asset, { ghostAtMs = [3000, 40000], durationMs = 1000, onProgress, forceRealtime = false } = {}) {
+    const started = performance.now(); let path = 'webcodecs', fallbackReason, ratio = 0;
+    const progress = value => { ratio = Math.max(ratio, clamp(value, 0, 1)); if (typeof onProgress === 'function') { try { onProgress(ratio); } catch (_) {} } };
+    try {
+      if (!(blob instanceof Blob) || !blob.size) throw Error('invalid-video-blob');
+      validate(asset);
+      if (!Array.isArray(ghostAtMs) || ghostAtMs.length !== 2 || !ghostAtMs.every(Number.isFinite) || ghostAtMs[0] < 0 || ghostAtMs[1] < ghostAtMs[0]) throw Error('invalid-ghost-time-range');
+      if (!Number.isFinite(durationMs) || durationMs < 200 || durationMs > 5000) throw Error('invalid-ghost-duration');
+      if (document.hidden) throw Error('document-hidden');
+      const options = { range: ghostAtMs.map(t => t / 1000), duration: durationMs / 1000 }, support = editSupport();
+      let result; progress(0);
+      if (support.webcodecs && !forceRealtime) {
+        try { result = await editFast(blob, asset, options, progress); }
+        catch (e) { if (editSemanticError(e)) throw e; fallbackReason = String(e.message || e); }
+      }
+      if (!result) {
+        path = 'realtime'; if (!support.realtime) throw Error(fallbackReason || 'video-edit-unavailable');
+        result = await editRealtime(blob, asset, options, progress);
+      }
+      progress(1);
+      return { ...result, path, ms: Math.round(performance.now() - started), stats: { ...result.stats, ...(fallbackReason ? { fallbackReason } : {}) } };
+    } catch (e) {
+      return { blob: null, mime: '', ext: '', applied: false, reason: String(e.message || e), path, ms: Math.round(performance.now() - started), ...(fallbackReason ? { stats: { fallbackReason } } : {}) };
+    }
+  }
+  window.GhostEngine = { init, status, loadAsset, composite, startVideo, videoSupport, editVideo, editSupport, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause } };
 })();

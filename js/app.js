@@ -14,6 +14,7 @@
   let roster = null;            // { [group]: [{name, grade}] } — 메모리 전용
   let asset = null;             // 이 장소의 귀신 소재
   let assetState = '확인 전';
+  let assetChecked = false;     // loadAsset 이 한 번 끝났는지
   let cur = { group: null, lastId: null };
   let stream = null;
   let camMode = 'student';      // student | video | scan | burst | background | test
@@ -33,6 +34,7 @@
     window.scrollTo(0, 0);
   }
   function goHome() {
+    setTimeout(runEdits, 1500);
     cur = { group: null, lastId: null };
     if (!station()) return show('scrSetup');
     renderHome();
@@ -179,6 +181,7 @@
     } catch (e) {
       assetState = s.ghost ? '⚠️ 소재 없음 — 이 장소가 배정된 조는 귀신이 안 나와요 (ghosts/' + s.id + '/)' : '없음 (귀신 없는 장소)';
     }
+    assetChecked = true;
     const st = $('assetStatus'); if (st) st.textContent = '귀신 소재: ' + assetState;
   }
 
@@ -250,7 +253,9 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: mode === 'video',
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        video: mode === 'video'
+          ? { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
       const v = $('camVideo'); v.srcObject = stream; await v.play();
     } catch (e) {
@@ -322,7 +327,7 @@
 
   // 사진 1장
   async function saveStudentPhoto(frame) {
-    show('scrSaving'); $('savingMsg').textContent = '사진을 저장하고 있어요...';
+    show('scrSaving'); setSaving('사진을 저장하고 있어요...', 0);
     const t0 = Date.now();
     const rec = baseRecord({ original: await canvasToBlob(frame), reason: 'not-assigned' });
     if (wantGhostHere()) {
@@ -348,7 +353,7 @@
     }
     $('camBurst').hidden = true; $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
     closeCamera();
-    show('scrSaving'); $('savingMsg').textContent = '사진을 저장하고 있어요...';
+    show('scrSaving'); setSaving('사진을 저장하고 있어요...', 0);
     const t0 = Date.now(), takenAt = Date.now();
     const recs = [];
     for (let i = 0; i < n; i++) recs.push(baseRecord({ takenAt, seq: i + 1, original: await canvasToBlob(frames[i]), reason: 'not-assigned' }));
@@ -370,76 +375,121 @@
     showResult({ recs, burst: true });
   }
 
-  // 영상 (스태킹·탁구공) — 녹화·귀신 합성은 GhostEngine.startVideo
-  let recorder = null, recTimer = null;
+  // 영상 (스태킹·탁구공) — 카메라 영상을 그대로 녹화하고, 귀신 조만 녹화 후 GhostEngine.editVideo 로 수정본을 만든다
+  let recorder = null, recTimer = null, recLimit = null, recStart = 0;
+  function pickVideoMime() {
+    if (!window.MediaRecorder) return null;
+    for (const m of ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']) {
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return null;
+  }
   async function startVideo() {
-    if (!window.GhostEngine || !GhostEngine.startVideo) { shooting = false; return toast('영상 기능이 아직 준비되지 않았어요', 4000); }
-    const sup = GhostEngine.videoSupport ? GhostEngine.videoSupport() : { ok: true };
-    if (!sup.ok) { shooting = false; return toast('이 기기에서는 영상 녹화가 안 돼요: ' + (sup.reason || ''), 5000); }
+    const mime = pickVideoMime();
+    if (!mime) { shooting = false; return toast('이 기기에서는 영상 녹화가 안 돼요', 5000); }
     const t = stType();
     const limitMs = t === '스태킹' ? stValue(60) * 1000 : 60000;
     $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
     await countdown(3);
-    const fmt = (ms) => (ms / 1000).toFixed(1);
-    try {
-      recorder = await GhostEngine.startVideo($('camVideo'), {
-        asset: wantGhostHere() ? asset : null,
-        audioTrack: stream.getAudioTracks()[0] || null,
-        maxMs: limitMs,
-        ghostAtMs: [3000, Math.max(4000, Math.min(9000, limitMs * 0.4))],
-        overlay: t === '스태킹' ? (ctx, w, h, ms) => {
-          const sz = Math.round(h * 0.07);
-          ctx.save(); ctx.font = `800 ${sz}px sans-serif`; ctx.textAlign = 'right';
-          ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(w - sz * 4.6, sz * 0.4, sz * 4.2, sz * 1.3);
-          ctx.fillStyle = '#fff'; ctx.fillText(fmt(Math.min(ms, limitMs)) + '초', w - sz * 0.7, sz * 1.4); ctx.restore();
-        } : null
-      });
-    } catch (e) {
-      recorder = null;
+    const chunks = [];
+    let mr;
+    try { mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000, audioBitsPerSecond: 96000 }); }
+    catch (e) {
       $('btnShutter').hidden = false; $('btnCamCancel').hidden = false; shooting = false;
       return toast('녹화를 시작할 수 없어요: ' + e.message, 5000);
     }
+    const done = new Promise((res) => { mr.onstop = () => res(new Blob(chunks, { type: mr.mimeType || mime })); });
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder = { mr, done, limitMs, auto: false };
+    mr.start(1000);
+    recStart = performance.now();
     $('camRec').hidden = false; $('btnStop').hidden = false;
+    const fmt = (ms) => (ms / 1000).toFixed(1);
     recTimer = setInterval(() => {
-      if (!recorder) return;
-      const ms = recorder.elapsed();
+      const ms = performance.now() - recStart;
       if (t === '스태킹') {
         $('camRecTime').textContent = fmt(Math.min(ms, limitMs)) + ' / ' + Math.round(limitMs / 1000) + '초';
         $('camRec').classList.toggle('warn', limitMs - ms < 10000);
       } else $('camRecTime').textContent = fmt(ms) + '초';
     }, 100);
-    // 모든 종료(끝 버튼·제한시간·탭 숨김)에 한 번만 저장
-    recorder.onstop = (r) => finishVideo(r, !!(r.stats && r.stats.stopReason === 'maxMs'));
+    recLimit = setTimeout(() => { if (recorder) { recorder.auto = true; finishVideo(); } }, limitMs);
   }
+  document.addEventListener('visibilitychange', () => { if (document.hidden && recorder) finishVideo(); });
+
   let finishing = false;
-  async function finishVideo(result, auto) {
+  async function finishVideo() {
     if (finishing || !recorder) return;
     finishing = true;
-    clearInterval(recTimer);
-    const rec0 = recorder;
+    clearInterval(recTimer); clearTimeout(recLimit);
+    const r0 = recorder;
+    const durationMs = Math.round(performance.now() - recStart);
+    try { if (r0.mr.state !== 'inactive') r0.mr.stop(); } catch (e) {}
     $('camRec').hidden = true; $('btnStop').hidden = true; $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
-    show('scrSaving'); $('savingMsg').textContent = '영상을 저장하고 있어요...';
+    show('scrSaving'); setSaving('영상을 저장하고 있어요...', 0);
     const t0 = Date.now();
     try {
-      const r = result || await rec0.stop();
+      const original = await r0.done;
       recorder = null;
       closeCamera();
       const t = stType();
-      const limitMs = stValue(60) * 1000;
-      const rec = baseRecord({
-        kind: 'video', ext: r.ext || 'webm', original: r.original, durationMs: r.durationMs,
-        composite: r.applied && r.composite ? r.composite : null, ghost: !!(r.applied && r.composite),
-        reason: wantGhostHere() ? (r.applied ? '' : r.reason || 'not-applied') : 'not-assigned'
-      });
-      if (t === '스태킹') { rec.success = !auto && r.durationMs <= limitMs; rec.timeMs = Math.min(r.durationMs, limitMs); }
+      const ext = /mp4/.test(original.type) ? 'mp4' : 'webm';
+      const rec = baseRecord({ kind: 'video', ext, original, durationMs, reason: 'not-assigned' });
+      if (t === '스태킹') { rec.success = !r0.auto && durationMs <= r0.limitMs; rec.timeMs = Math.min(durationMs, r0.limitMs); }
+      // 귀신 조는 수정본을 나중에(태블릿이 쉴 때) 만든다 → 학생은 기다리지 않는다
+      if (wantGhostHere()) { rec.needsEdit = true; rec.reason = '편집 대기'; }
       await saveRecords([rec]);
-      await minWait(t0, 1500);
+      await fakeProgress(t0, 1500);
       showResult({ recs: [rec], video: true, stacking: t === '스태킹', pingpong: t === '탁구공' });
     } catch (e) {
       recorder = null;
       toast('영상 저장에 실패했어요: ' + e.message, 5000);
       closeCamera(); show('scrMission');
     } finally { finishing = false; shooting = false; }
+  }
+  // ---------- 영상 편집 대기열 (귀신 조 영상 → 수정본) ----------
+  // 카메라를 쓰지 않을 때만 한 개씩 처리. 태블릿을 다시 켜도 IndexedDB 에 남은 것부터 이어서 한다.
+  let editing = false;
+  async function runEdits() {
+    if (editing || !window.GhostEngine || !GhostEngine.editVideo) return;
+    editing = true;
+    try {
+      for (;;) {
+        if (stream) break;                                   // 촬영 중이면 다음 기회에
+        const rec = (await db.all()).filter((r) => r.needsEdit).sort((a, b) => a.takenAt - b.takenAt)[0];
+        if (!rec) break;
+        if (!assetChecked) break;                            // 소재 확인이 끝난 뒤에 처리
+        if (!asset || rec.stationId !== conf.stationId) {
+          rec.needsEdit = false; rec.reason = asset ? '다른 장소 영상' : assetState; await db.put(rec); continue;
+        }
+        try {
+          const d = rec.durationMs || 10000;
+          const r = await GhostEngine.editVideo(rec.original, asset, {
+            ghostAtMs: [Math.min(3000, d * 0.2), Math.max(4000, d - 2000)], durationMs: 1000
+          });
+          if (r.applied && r.blob) { rec.composite = r.blob; rec.ghost = true; rec.reason = ''; }
+          else rec.reason = r.reason || 'not-applied';
+        } catch (e) { rec.reason = 'error: ' + e.message; }
+        rec.needsEdit = false;
+        await db.put(rec);
+        if (setting('업로드', '자동') === '자동') uploadPending(false);
+      }
+    } finally { editing = false; }
+  }
+  setInterval(runEdits, 20000);
+
+  let savingShown = 0;
+  function setSaving(msg, p) {
+    if (msg) $('savingMsg').textContent = msg;
+    if (p != null) { savingShown = Math.max(savingShown, Math.min(1, p)); $('savingBar').style.width = Math.round(savingShown * 100) + '%'; }
+  }
+  async function fakeProgress(t0, expectMs) {
+    // 실제 편집이 끝났어도 예상 시간까지 진행 막대를 자연스럽게 채운다
+    while (Date.now() - t0 < expectMs) {
+      setSaving(null, Math.max(savingShown, (Date.now() - t0) / expectMs));
+      await sleep(120);
+    }
+    setSaving(null, 1); await sleep(250);
+    savingShown = 0;
   }
 
   // 책찾기: 바코드 인식 또는 번호 입력 → 맞으면 책과 함께 인증사진
@@ -538,6 +588,8 @@
     $('resClueText').textContent = s.clue || '';
     $('btnDone').hidden = !success;           // 성공해야 완료 가능
     $('btnRetake').hidden = !decided;         // 탁구공은 개수를 고른 뒤에 버튼 표시
+    $('btnRetake').textContent = success ? '🔄 다시 찍기' : '🔄 다시 도전!';
+    $('btnRetake').className = success ? 'btn ghost' : 'btn';
   }
 
   async function saveBackground(frame) {
@@ -649,7 +701,7 @@
       const info = (r.kind === 'video' ? '🎬 ' : '') + (r.seq ? `#${r.seq} ` : '') +
         (r.timeMs ? `${(r.timeMs / 1000).toFixed(1)}초 ` : '') + (r.count != null ? `공 ${r.count}개 ` : '');
       d.innerHTML = `${media}<div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())} ${info}<br>` +
-        `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
+        `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${r.needsEdit ? '<span class="badge w">수정 대기</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
       d.onclick = () => openRecord(r);
       g.appendChild(d);
     });
@@ -756,7 +808,7 @@
     $('btnShutter').onclick = shoot;
     $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };
     $('btnRetake').onclick = startStudentCamera;
-    $('btnStop').onclick = () => finishVideo(null, false);
+    $('btnStop').onclick = () => finishVideo();
     $('btnScanOk').onclick = () => checkBook($('scanInput').value, true);
     $('scanInput').onkeydown = (e) => { if (e.key === 'Enter') checkBook($('scanInput').value, true); };
     $('btnDone').onclick = goHome;
@@ -795,6 +847,7 @@
     await loadRoster(true);   // 이름은 메모리로만. 실패하면 저장된 설정(이름 없음)으로 진행
     await loadAsset();
     if (!$('scrHome').hidden) renderHome();
+    runEdits();               // 지난번에 못 끝낸 영상 편집 이어서
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

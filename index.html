@@ -88,6 +88,8 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 .count-card{max-width:640px;margin:20px auto 0}
 .count-card button{min-width:64px;font-size:26px}
 #resVideo{display:block;max-width:100%;max-height:58vh}
+.save-track{width:min(70vw,420px);height:12px;margin:18px auto 0;border-radius:8px;background:rgba(255,255,255,.12);overflow:hidden}
+.save-bar{height:100%;width:0;background:linear-gradient(90deg,#ffd98f,#e9a94a);transition:width .15s}
 .spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:30px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* admin */
@@ -207,6 +209,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
     <div class="spinner"></div>
     <h2 class="big-title" style="font-size:26px" id="savingMsg">사진을 저장하고 있어요...</h2>
+    <div class="save-track"><div class="save-bar" id="savingBar"></div></div>
   </div>
 </section>
 
