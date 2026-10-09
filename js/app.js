@@ -464,7 +464,8 @@
         try {
           const d = rec.durationMs || 10000;
           const r = await GhostEngine.editVideo(rec.original, asset, {
-            ghostAtMs: [Math.min(3000, d * 0.2), Math.max(4000, d - 2000)], durationMs: 1000
+            ghostAtMs: [Math.min(3000, d * 0.2), Math.max(4000, d - 2000)], durationMs: 1000,
+            forceRealtime: true   // 빠른 경로(WebCodecs)는 빈자리 판정 오류가 있어 검증된 재생·재녹화 방식만 사용 (뒤에서 처리하므로 속도 무관)
           });
           if (r.applied && r.blob) { rec.composite = r.blob; rec.ghost = true; rec.reason = ''; }
           else rec.reason = r.reason || 'not-applied';

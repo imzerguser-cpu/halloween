@@ -486,7 +486,7 @@
       const w = video.displayWidth, h = video.displayHeight;
       if (w * h > 2560 * 1440) throw Error('video-too-large');
       const analysis = editAnalysis(asset, w, h, options.range.map(t => t + start), options.duration);
-      const scan = new M.CanvasSink(video, { width: 192, height: Math.max(32, Math.round(192 * h / w)), poolSize: 1 });
+      const scan = new M.CanvasSink(video, { width: 192, height: Math.max(32, Math.round(192 * h / w)), fit: 'fill', poolSize: 1 });
       let scanned = 0;
       for await (const frame of scan.canvases()) {
         await analysis.inspect(frame.canvas, frame.timestamp, frame.timestamp + frame.duration); scanned++;
