@@ -438,6 +438,7 @@
       // 귀신 조는 수정본을 나중에(태블릿이 쉴 때) 만든다 → 학생은 기다리지 않는다
       if (wantGhostHere()) { rec.needsEdit = true; rec.reason = '편집 대기'; }
       await saveRecords([rec]);
+      if (rec.needsEdit) setTimeout(runEdits, 500);   // 학생이 결과를 보고 이동하는 동안 바로 편집 시작
       await fakeProgress(t0, 1500);
       showResult({ recs: [rec], video: true, stacking: t === '스태킹', pingpong: t === '탁구공' });
     } catch (e) {
@@ -582,7 +583,15 @@
     $('resMsg').textContent = msg;
     setClue(success, !res.pingpong);
     show('scrResult');
+    armIdleHome();
   }
+  // 결과 화면에서 2분 동안 아무도 안 누르면 대기 화면으로 (학생이 완료를 안 누르고 떠난 경우)
+  let idleTimer = null;
+  function armIdleHome() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (!$('scrResult').hidden) goHome(); }, 120000);
+  }
+  document.addEventListener('pointerdown', () => { if (!$('scrResult').hidden) armIdleHome(); });
   function setClue(success, decided) {
     const s = station();
     $('resClue').hidden = !(success && s.clue);
