@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>진행판</title>
+<style>
+:root{--bg:#14161c;--panel:#1d2028;--line:#2e3240;--tx:#e8eaf0;--tx2:#a9aec0;--gold:#ffcf7a;--ok:#9ce6b4;--bad:#ff9aa8;--warn:#ffd98f;--violet:#d9b8ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.5}
+[hidden]{display:none!important}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 20px;background:#1a1d25;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:19px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:4px 10px;border-radius:999px;background:#252935;font-size:13px;color:var(--tx2)}
+.chip.ok{background:#173524;color:var(--ok)}.chip.bad{background:#3d1820;color:var(--bad)}.chip.busy{background:#3a2d10;color:var(--warn)}
+main{padding:16px 20px 40px;max-width:1400px;margin:0 auto}
+.grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,1fr);gap:16px}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:16px;margin-bottom:10px}
+.help{font-size:13px;color:var(--tx2);margin-bottom:8px}
+.field{display:block;margin-bottom:10px}.field span{display:block;font-size:13px;color:var(--tx2);margin-bottom:3px}
+input,select{width:100%;padding:9px 11px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px;font-family:inherit}
+button{border:none;border-radius:9px;padding:9px 16px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}
+button.ghost{background:#252935;color:var(--tx)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top;white-space:nowrap}
+th{color:var(--tx2);font-weight:700;position:sticky;top:0;background:var(--panel)}
+td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
+.cell{display:flex;flex-direction:column;gap:2px}
+.st-ok{color:var(--ok);font-weight:700}.st-bad{color:var(--bad)}.st-none{color:#555}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:6px;font-weight:700}
+.tag.g{background:#3d2457;color:var(--violet)}.tag.w{background:#4a3a12;color:var(--warn)}.tag.u{background:#173524;color:var(--ok)}.tag.x{background:#3d1820;color:var(--bad)}
+.feed{list-style:none;max-height:520px;overflow:auto;font-size:13px}
+.feed li{padding:6px 0;border-bottom:1px solid var(--line)}
+.feed time{color:var(--tx2);margin-right:6px}
+.queue li{padding:5px 0;border-bottom:1px solid var(--line);font-size:13px;list-style:none}
+.status{font-size:13px;padding:7px 10px;border-radius:8px;background:#252935;margin-top:8px}
+.status.ok{background:#173524;color:var(--ok)}.status.err{background:#3d1820;color:var(--bad)}
+.bar{height:8px;border-radius:6px;background:#252935;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;width:0;background:var(--gold)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎃 진행판</h1>
+  <div class="chips">
+    <span class="chip" id="chipConn">연결 안 됨</span>
+    <span class="chip" id="chipSync">-</span>
+    <span class="chip" id="chipEdit">편집기 대기</span>
+    <span class="chip" id="chipAwake">-</span>
+  </div>
+</header>
+<main>
+  <section class="panel" id="connPanel">
+    <h2>연결</h2>
+    <p class="help">태블릿 교사 모드와 같은 웹 앱 주소와 비밀 키를 넣으세요. 이 노트북은 행사 내내 켜 두고 <b>이 탭을 화면에 띄워 두세요</b> (다른 탭으로 가거나 잠자기에 들어가면 영상 편집이 멈춥니다).</p>
+    <div class="row">
+      <label class="field" style="flex:3;min-width:260px"><span>웹 앱 URL</span><input id="inUrl" autocomplete="off"></label>
+      <label class="field" style="flex:1;min-width:160px"><span>비밀 키</span><input id="inKey" autocomplete="off"></label>
+      <button id="btnConnect" style="margin-top:8px">연결</button>
+    </div>
+    <div class="status" id="connStatus">연결 전</div>
+  </section>
+
+  <div class="grid">
+    <div>
+      <section class="panel">
+        <h2>조별 진행</h2>
+        <p class="help">✅ 성공 · ❌ 실패(도전 횟수) · 👻 이 조의 수정 장소 · ★ 수정본 완료 · ⏳ 수정 대기/편집 중</p>
+        <div class="tablewrap"><table id="progress"></table></div>
+      </section>
+      <section class="panel">
+        <h2>영상 편집 (노트북)</h2>
+        <p class="help">태블릿이 올린 영상 가운데 수정이 필요한 것을 받아서 1초 수정본을 만들고 드라이브 "수정본" 폴더에 올립니다. 한 개씩 차례로 처리합니다.</p>
+        <div class="row"><label class="row" style="gap:6px"><input type="checkbox" id="autoEdit" checked style="width:auto"> 자동 편집 켜기</label></div>
+        <div id="editNow" class="status">대기 중</div>
+        <div class="bar"><i id="editBar"></i></div>
+        <ul class="queue" id="queue" style="margin-top:10px"></ul>
+      </section>
+      <section class="panel">
+        <h2>파일로 직접 편집 (인터넷이 안 될 때)</h2>
+        <p class="help">태블릿 사진함의 "압축 파일로 내보내기"로 받은 원본 영상을 골라 수정본을 만들고 이 노트북에 저장합니다.</p>
+        <div class="row">
+          <label class="field" style="flex:1;min-width:160px"><span>장소</span><select id="manStation"></select></label>
+          <label class="field" style="flex:2;min-width:220px"><span>원본 영상</span><input type="file" id="manFile" accept="video/*"></label>
+          <button id="btnManual" style="margin-top:8px">수정본 만들기</button>
+        </div>
+        <div class="status" id="manStatus">-</div>
+      </section>
+    </div>
+    <aside>
+      <section class="panel">
+        <h2>최근 활동</h2>
+        <ul class="feed" id="feed"></ul>
+      </section>
+    </aside>
+  </div>
+</main>
+<script src="js/ghost-engine.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

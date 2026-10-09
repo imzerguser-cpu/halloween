@@ -35,6 +35,7 @@
   }
   function goHome() {
     setTimeout(runEdits, 1500);
+    releaseHolds();
     cur = { group: null, lastId: null };
     if (!station()) return show('scrSetup');
     renderHome();
@@ -128,13 +129,13 @@
   function blobToB64(blob) {
     return new Promise((res, rej) => {
       const fr = new FileReader();
-      fr.onload = () => res(String(fr.result).split(',')[1]);
+      fr.onload = () => { const s = String(fr.result); res(s.slice(s.indexOf(';base64,') + 8)); };
       fr.onerror = () => rej(fr.error);
       fr.readAsDataURL(blob);
     });
   }
-  async function postFile(kind, filename, blob) {
-    const body = JSON.stringify({ key: conf.apiKey, action: 'upload', kind, filename, mime: blob.type || 'image/jpeg', data: await blobToB64(blob) });
+  async function postFile(kind, filename, blob, meta) {
+    const body = JSON.stringify({ key: conf.apiKey, action: 'upload', kind, filename, mime: blob.type || 'image/jpeg', meta: meta || null, data: await blobToB64(blob) });
     const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'upload');
@@ -148,15 +149,33 @@
       const recs = (await db.all()).filter(needsUpload);
       for (const rec of recs) {
         try {
-          if (!rec.up.orig) { await postFile('원본', fileName(rec, '원본'), rec.original); rec.up.orig = true; await db.put(rec); n++; }
-          if (rec.composite && !rec.up.comp) { await postFile('수정본', fileName(rec, '수정본'), rec.composite); rec.up.comp = true; await db.put(rec); n++; }
+          if (!rec.up.orig) { await postFile('원본', fileName(rec, '원본'), rec.original, uploadMeta(rec, true)); rec.up.orig = true; await db.put(rec); n++; }
+          if (rec.composite && !rec.up.comp) { await postFile('수정본', fileName(rec, '수정본'), rec.composite, uploadMeta(rec, false)); rec.up.comp = true; await db.put(rec); n++; }
         } catch (e) { fail++; }
         if (report) setStatus('galStatus', `올리는 중... ${n}개 완료${fail ? `, ${fail}개 실패` : ''}`);
       }
     } finally { uploading = false; }
     return { n, fail };
   }
-  const needsUpload = (r) => !r.up.orig || (r.composite && !r.up.comp);
+  const needsUpload = (r) => !r.hold && (!r.up.orig || (r.composite && !r.up.comp));
+  // 시트 "기록" 탭에 남길 정보 (이름 없음 — 조 번호만)
+  function uploadMeta(rec, isOriginal) {
+    const record = rec.timeMs != null ? (rec.timeMs / 1000).toFixed(1) + '초'
+      : rec.count != null ? `공 ${rec.count}개` : rec.seq ? `${rec.seq}번째` : '';
+    return {
+      recId: rec.id, group: rec.group, stationId: rec.stationId, stationName: rec.stationName,
+      media: rec.kind === 'video' ? '영상' : '사진',
+      needsEdit: !!(isOriginal && rec.remoteEdit),
+      result: rec.success == null ? '' : rec.success ? '성공' : '실패',
+      record
+    };
+  }
+  // 탁구공처럼 결과를 고른 뒤에 올릴 기록: 학생이 그냥 떠나면 대기 화면으로 갈 때 풀어 준다
+  async function releaseHolds() {
+    const held = (await db.all().catch(() => [])).filter((r) => r.hold);
+    for (const r of held) { r.hold = false; await db.put(r); }
+    if (held.length && setting('업로드', '자동') === '자동') uploadPending(false);
+  }
   setInterval(() => { if (setting('업로드', '자동') === '자동') uploadPending(false); }, 60000);
   window.addEventListener('online', () => { if (setting('업로드', '자동') === '자동') uploadPending(false); });
 
@@ -436,7 +455,11 @@
       const rec = baseRecord({ kind: 'video', ext, original, durationMs, reason: 'not-assigned' });
       if (t === '스태킹') { rec.success = !r0.auto && durationMs <= r0.limitMs; rec.timeMs = Math.min(durationMs, r0.limitMs); }
       // 귀신 조는 수정본을 나중에(태블릿이 쉴 때) 만든다 → 학생은 기다리지 않는다
-      if (wantGhostHere()) { rec.needsEdit = true; rec.reason = '편집 대기'; }
+      if (wantGhostHere()) {
+        if (setting('영상편집', '노트북') === '태블릿') { rec.needsEdit = true; rec.reason = '편집 대기'; }
+        else { rec.remoteEdit = true; rec.reason = '노트북 편집'; }
+      }
+      if (t === '탁구공') rec.hold = true;              // 공 개수를 고른 뒤에 올린다
       await saveRecords([rec]);
       if (rec.needsEdit) setTimeout(runEdits, 500);   // 학생이 결과를 보고 이동하는 동안 바로 편집 시작
       await fakeProgress(t0, 1500);
@@ -570,7 +593,8 @@
       for (let n = 0; n <= 5; n++) {
         const b = document.createElement('button'); b.className = 'btn ghost'; b.textContent = n;
         b.onclick = async () => {
-          rec.count = n; rec.success = n >= need; await db.put(rec);
+          rec.count = n; rec.success = n >= need; rec.hold = false; await db.put(rec);
+          if (setting('업로드', '자동') === '자동') uploadPending(false);
           $('resCount').hidden = true;
           $('resTitle').textContent = rec.success ? `🎉 ${n}개! 미션 성공!` : `😢 ${n}개… 아깝다!`;
           $('resMsg').textContent = rec.success ? '영상이 저장됐어요' : `${need}개 이상 넣어야 해요. 다시 도전해 볼까요?`;
@@ -711,7 +735,7 @@
       const info = (r.kind === 'video' ? '🎬 ' : '') + (r.seq ? `#${r.seq} ` : '') +
         (r.timeMs ? `${(r.timeMs / 1000).toFixed(1)}초 ` : '') + (r.count != null ? `공 ${r.count}개 ` : '');
       d.innerHTML = `${media}<div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())} ${info}<br>` +
-        `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${r.needsEdit ? '<span class="badge w">수정 대기</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
+        `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${r.needsEdit ? '<span class="badge w">수정 대기</span>' : ''}${r.remoteEdit ? '<span class="badge g">노트북 수정</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
       d.onclick = () => openRecord(r);
       g.appendChild(d);
     });
@@ -856,7 +880,8 @@
     goHome();
     await loadRoster(true);   // 이름은 메모리로만. 실패하면 저장된 설정(이름 없음)으로 진행
     await loadAsset();
-    if (!$('scrHome').hidden) renderHome();
+    if (!$('scrSetup').hidden && station()) goHome();   // 시트에서 장소를 받아 왔으면 바로 시작 화면으로
+    else if (!$('scrHome').hidden) renderHome();
     runEdits();               // 지난번에 못 끝낸 영상 편집 이어서
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
