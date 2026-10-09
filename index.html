@@ -67,6 +67,27 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 .clue{max-width:640px;margin:22px auto 0;padding:14px 20px}
 .clue-label{text-align:center;font-weight:800;font-size:15px;color:#7a5a24;margin-bottom:2px}
 .clue .mission-text{font-size:20px}
+.rec-badge{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:44px;font-weight:800;
+  padding:6px 22px;border-radius:16px;display:flex;align-items:center;gap:12px;font-variant-numeric:tabular-nums}
+.rec-badge i{width:18px;height:18px;border-radius:50%;background:#ff3b4e;animation:blink 1s infinite}
+.rec-badge.warn{color:#ffcf7a}
+@keyframes blink{50%{opacity:.2}}
+.stop-btn{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(70vw,560px);height:min(22vh,160px);
+  font-size:clamp(36px,7vw,64px);border-radius:28px;background:linear-gradient(180deg,#ff9aa8,#d9506a);color:#fff;box-shadow:0 8px 0 #8c2638,0 10px 30px rgba(0,0,0,.5);z-index:5}
+.stop-btn:active{transform:translate(-50%,6px)}
+.burst-count{position:absolute;top:56px;right:24px;background:rgba(0,0,0,.55);color:#fff;font-size:24px;font-weight:800;padding:6px 16px;border-radius:12px}
+.scan-box{position:absolute;inset:0;pointer-events:none}
+.scan-frame{position:absolute;left:50%;top:42%;width:min(60vw,520px);height:min(22vw,200px);transform:translate(-50%,-50%);
+  border:4px solid #ffcf7a;border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.35)}
+.scan-panel{position:absolute;left:0;right:0;bottom:120px;text-align:center;pointer-events:auto}
+.scan-msg{color:#fff;font-size:20px;font-weight:800;text-shadow:0 2px 6px #000;margin-bottom:10px}
+.scan-msg.bad{color:#ff9aa8}.scan-msg.good{color:#9ce6b4}
+#scanInput{font-size:20px;padding:10px 14px;border-radius:10px;border:2px solid #ffcf7a;background:rgba(0,0,0,.6);color:#fff;width:min(70vw,320px);user-select:text;-webkit-user-select:text}
+.burst-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-width:860px;margin:0 auto}
+.burst-grid img{width:100%;border:2px solid #fff;border-radius:6px;display:block;cursor:pointer}
+.count-card{max-width:640px;margin:20px auto 0}
+.count-card button{min-width:64px;font-size:26px}
+#resVideo{display:block;max-width:100%;max-height:58vh}
 .spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:30px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* admin */
@@ -87,7 +108,7 @@ table.t{width:100%;border-collapse:collapse;font-size:14px}
 table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align:left}
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
 .gitem{background:#0f1116;border:1px solid #2e3240;border-radius:10px;overflow:hidden;cursor:pointer}
-.gitem img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000}
+.gitem img,.gitem video{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#000}
 .gitem div{padding:6px 8px;font-size:12px;color:#c3c7d4}
 .badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700;background:#333;margin-right:3px}
 .badge.g{background:#5b2a7a;color:#f0d8ff}.badge.u{background:#173524;color:#9ce6b4}.badge.w{background:#4a3a12;color:#ffd98f}
@@ -150,7 +171,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
     <h2 class="big-title" id="misStation">📜 미션</h2>
     <div class="parch" style="margin:14px 0 22px"><div class="mission-text" id="misText"></div></div>
-    <p class="lead">미션을 성공한 순간을 사진으로 남겨요!</p>
+    <p class="lead" id="misLead">미션을 성공한 순간을 사진으로 남겨요!</p>
     <div class="row center">
       <button class="btn ghost" data-go="home">처음으로</button>
       <button class="btn" id="btnOpenCam">📸 사진 찍으러 가기</button>
@@ -164,10 +185,20 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   <div class="cam-top" id="camTop"></div>
   <div class="countdown" id="camCount"></div>
   <div class="flash" id="camFlash"></div>
+  <div class="rec-badge" id="camRec" hidden><i></i><span id="camRecTime">0.0</span></div>
+  <div class="burst-count" id="camBurst" hidden></div>
+  <div class="scan-box" id="camScan" hidden>
+    <div class="scan-frame"></div>
+    <div class="scan-panel">
+      <div class="scan-msg" id="scanMsg">책 뒤의 바코드를 네모 안에 비춰 주세요</div>
+      <div class="row center"><input id="scanInput" placeholder="바코드 아래 번호 입력" autocomplete="off" inputmode="text"><button class="btn sm" id="btnScanOk">확인</button></div>
+    </div>
+  </div>
   <div class="cam-bar">
     <button class="btn ghost sm" id="btnCamCancel">돌아가기</button>
     <button class="shutter" id="btnShutter" aria-label="사진 찍기"></button>
-    <label class="hd-sub" style="display:flex;align-items:center;gap:6px;color:#fff"><input type="checkbox" id="camTimer" checked> 3초 타이머</label>
+    <button class="btn stop-btn" id="btnStop" hidden>⏹ 끝!</button>
+    <label class="hd-sub" id="camTimerLabel" style="display:flex;align-items:center;gap:6px;color:#fff"><input type="checkbox" id="camTimer" checked> 3초 타이머</label>
   </div>
 </section>
 
@@ -175,7 +206,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 <section class="screen" id="scrSaving" hidden>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
     <div class="spinner"></div>
-    <h2 class="big-title" style="font-size:26px">사진을 저장하고 있어요...</h2>
+    <h2 class="big-title" style="font-size:26px" id="savingMsg">사진을 저장하고 있어요...</h2>
   </div>
 </section>
 
@@ -183,9 +214,15 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 <section class="screen" id="scrResult" hidden>
   <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="resGroup"></div></header>
   <div class="wrap">
-    <h2 class="big-title">🎉 미션 성공!</h2>
+    <h2 class="big-title" id="resTitle">🎉 미션 성공!</h2>
     <p class="lead" id="resMsg">사진이 저장됐어요</p>
-    <div class="photo-box" id="resPhotoBox"><img id="resPhoto" alt="찍은 사진"></div>
+    <div class="photo-box" id="resPhotoBox"><img id="resPhoto" alt="찍은 사진"><video id="resVideo" controls playsinline hidden></video></div>
+    <div class="burst-grid" id="resBurst" hidden></div>
+    <div class="card count-card" id="resCount" hidden>
+      <div class="names" style="margin-top:0">컵에 들어간 공은 몇 개인가요?</div>
+      <div class="row center" id="resCountBtns"></div>
+      <p class="hd-sub" style="text-align:center;margin-top:8px">영상이 증거로 남아요. 정직하게 눌러 주세요!</p>
+    </div>
     <div class="parch clue" id="resClue" hidden><div class="clue-label">🔑 단서</div><div class="mission-text" id="resClueText"></div></div>
     <div class="row center" style="margin-top:26px">
       <button class="btn ghost" id="btnRetake">🔄 다시 찍기</button>
@@ -280,7 +317,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 </section>
 
 <div class="modal" id="modal" hidden>
-  <img id="modalImg" alt="">
+  <img id="modalImg" alt=""><video id="modalVideo" controls playsinline hidden style="max-width:100%;max-height:78vh;border-radius:8px"></video>
   <div class="row center" style="margin-top:12px" id="modalBtns"></div>
 </div>
 <div class="toast" id="toast" hidden></div>

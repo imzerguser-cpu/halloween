@@ -184,5 +184,193 @@
       return result(true, person ? undefined : 'background-verified-without-segmentation', out);
     } catch (e) { return result(false, 'composite-error: ' + String(e.message || e)); }
   }
-  window.GhostEngine = { init, status, loadAsset, composite, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause } };
+  function videoSupport() {
+    if (typeof MediaRecorder === 'undefined' || typeof MediaStream === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return { ok: false, mime: '', reason: 'video-recording-unavailable' };
+    // Explicit H.264 first; never assume an arbitrary MP4 encoder is H.264.
+    const types = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm'];
+    const mime = types.find(t => MediaRecorder.isTypeSupported(t));
+    return mime ? { ok: true, mime: mime.split(';')[0], recorderMime: mime } : { ok: false, mime: '', reason: 'video-codec-unavailable' };
+  }
+
+  async function startVideo(video, { asset = null, audioTrack = null, maxMs = 60000, ghostAtMs = [3000, 9000], overlay } = {}) {
+    const support = videoSupport();
+    if (!support.ok) throw new Error(support.reason);
+    if (!video || video.readyState < 2 || !video.videoWidth || video.paused || video.ended) throw new Error('camera-not-playing');
+    if (!Number.isFinite(maxMs) || maxMs <= 0 || maxMs > 60000) throw new Error('maxMs-must-be-between-0-and-60000');
+    if (!Array.isArray(ghostAtMs) || ghostAtMs.length !== 2 || !ghostAtMs.every(Number.isFinite) || ghostAtMs[0] < 0 || ghostAtMs[1] < ghostAtMs[0]) throw new Error('invalid-ghost-time-range');
+    if (overlay != null && typeof overlay !== 'function') throw new Error('invalid-overlay');
+    if (audioTrack && (audioTrack.kind !== 'audio' || audioTrack.readyState !== 'live')) throw new Error('invalid-audio-track');
+    if (document.hidden) throw new Error('document-hidden');
+    if (asset) validate(asset);
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight), 720 / Math.min(video.videoWidth, video.videoHeight));
+    const sourceWidth = video.videoWidth, sourceHeight = video.videoHeight;
+    const w = Math.max(2, Math.floor(sourceWidth * scale / 2) * 2), h = Math.max(2, Math.floor(sourceHeight * scale / 2) * 2);
+    const original = canvas(w, h), oc = original.getContext('2d');
+    const edited = asset ? canvas(w, h) : null, ec = edited && edited.getContext('2d');
+    // Overlay is rendered once, then copied onto both outputs at identical timestamps.
+    const hud = overlay ? canvas(w, h) : null, hc = hud && hud.getContext('2d');
+    oc.drawImage(video, 0, 0, w, h);
+    let reason = asset ? 'ghost-time-not-reached' : 'no-asset';
+    let background, layer, probe, pc, reference, box, tuned = false, eligible = !!asset;
+    if (asset) {
+      if (Math.abs(w / h / (asset.meta.width / asset.meta.height) - 1) > .025) { eligible = false; reason = 'aspect-ratio-mismatch'; }
+      if (eligible) {
+        const registration = await align(asset.background, original, asset.meta.bbox, null);
+        if (registration.score > 18 || registration.boundary) { eligible = false; reason = 'background-alignment-uncertain'; }
+        else {
+          background = canvas(w, h); layer = canvas(w, h);
+          background.getContext('2d').drawImage(asset.background, registration.dx, registration.dy, w, h);
+          layer.getContext('2d').drawImage(asset.ghost, registration.dx, registration.dy, w, h);
+          const b = asset.meta.bbox, sx = w / asset.meta.width, sy = h / asset.meta.height;
+          const bounds = [b[0] * sx + registration.dx, b[1] * sy + registration.dy, b[2] * sx, b[3] * sy];
+          if (bounds[0] < 0 || bounds[1] < 0 || bounds[0] + bounds[2] > w || bounds[1] + bounds[3] > h) { eligible = false; reason = 'ghost-out-of-frame'; }
+          probe = canvas(192, Math.max(2, Math.round(192 * h / w))); pc = probe.getContext('2d', { willReadFrequently: true });
+          reference = pixels(draw(background, probe.width, probe.height)).data;
+          box = bounds.map((v, i) => v * (i % 2 ? probe.height / h : probe.width / w));
+        }
+      }
+    }
+    if (document.hidden || video.paused || video.ended) throw new Error('camera-interrupted-during-setup');
+    function spaceClear() {
+      pc.drawImage(original, 0, 0, probe.width, probe.height);
+      const current = pc.getImageData(0, 0, probe.width, probe.height).data;
+      const ratios = [[], [], []];
+      // Exposure estimate from the rest of the room, not from a person covering the ghost.
+      for (let y = 2; y < probe.height - 2; y += 4) for (let x = 2; x < probe.width - 2; x += 4) {
+        if (x >= box[0] - 3 && x <= box[0] + box[2] + 3 && y >= box[1] - 3 && y <= box[1] + box[3] + 3) continue;
+        const i = (y * probe.width + x) * 4;
+        for (let k = 0; k < 3; k++) if (reference[i + k] > 20 && reference[i + k] < 235) ratios[k].push(current[i + k] / reference[i + k]);
+      }
+      const gain = ratios.map(a => clamp(a.length ? median(a) : 1, .65, 1.45));
+      let changed = 0, count = 0;
+      for (let y = Math.max(0, Math.floor(box[1] - 3)); y < Math.min(probe.height, box[1] + box[3] + 3); y++) for (let x = Math.max(0, Math.floor(box[0] - 3)); x < Math.min(probe.width, box[0] + box[2] + 3); x++) {
+        const i = (y * probe.width + x) * 4; count++;
+        if (Math.max(...gain.map((v, k) => Math.abs(current[i + k] - reference[i + k] * v))) > 22) changed++;
+      }
+      return count > 0 && changed / count <= .015;
+    }
+    function tuneLayer() {
+      const tuning = fit(background, original, layer, null), data = pixels(layer);
+      let seed = 123456789;
+      for (let i = 0; i < data.data.length; i += 4) {
+        if (!data.data[i + 3]) continue;
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        const n = ((seed >>> 0) / 4294967296 - .5) * tuning.noise * 3.46;
+        for (let k = 0; k < 3; k++) data.data[i + k] = clamp(data.data[i + k] * tuning.gain[k] + n, 0, 255);
+      }
+      layer.getContext('2d').putImageData(data, 0, 0);
+      const softened = canvas(w, h), ctx = softened.getContext('2d');
+      ctx.filter = `blur(${tuning.blur}px)`; ctx.drawImage(layer, 0, 0); layer = softened; tuned = true;
+    }
+    const entries = [], ownedTracks = [], removers = [];
+    let started = null, ended = null, stopping = false, stopPromise, frameTimer, limitTimer, lastFrame = 0, lastComposite = -Infinity;
+    let appearance, finished = false, applied = false, frames = 0, compositeFrames = 0, missed = 0, windowMissed = 0, windowFrames = 0, windowStart = 0, compositeFps = 24;
+    const downgrades = [];
+    let finishReason = 'manual', recordingError;
+    const chosenTime = ghostAtMs[0] + Math.random() * (ghostAtMs[1] - ghostAtMs[0]);
+    const elapsed = () => started === null ? 0 : Math.max(0, (ended === null ? performance.now() : ended) - started);
+    const rec = { elapsed, stop: () => stop('manual'), onautostop: null, onstop: null };
+    function listen(target, name, fn) { target.addEventListener(name, fn); removers.push(() => target.removeEventListener(name, fn)); }
+    function cleanup() {
+      clearTimeout(frameTimer); clearTimeout(limitTimer);
+      for (const remove of removers.splice(0)) remove();
+      for (const track of ownedTracks) track.stop();
+    }
+    function stop(cause) {
+      if (stopPromise) return stopPromise;
+      stopping = true; ended = performance.now(); finishReason = cause;
+      clearTimeout(frameTimer); clearTimeout(limitTimer);
+      // Install the promise before calling stop: errors/stop events may re-enter here.
+      stopPromise = Promise.all(entries.map(e => e.done)).then(blobs => {
+        cleanup();
+        const r = { original: blobs[0], composite: edited ? blobs[1] : null, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', durationMs: Math.round(elapsed()), applied,
+          ...(reason ? { reason } : {}), ...(appearance !== undefined ? { ghostAtMs: Math.round(appearance) } : {}),
+          stats: { width: w, height: h, targetFps: 24, compositeFps: edited ? compositeFps : 0, frames, compositeFrames, droppedFrameRatio: frames + missed ? missed / (frames + missed) : 0, dropMetric: 'render-scheduler-estimate', downgrades, stopReason: finishReason, ...(recordingError ? { error: recordingError } : {}) } };
+        if (blobs.some(b => !b.size)) { r.reason = 'empty-recording'; r.applied = false; }
+        else if (recordingError) r.reason = 'recording-interrupted: ' + recordingError;
+        // Callback failures cannot discard the successfully finalized recording.
+        for (const cb of [rec.onstop, cause === 'maxMs' ? rec.onautostop : null]) if (typeof cb === 'function') { try { cb(r); } catch (e) { console.error(e); } }
+        return r;
+      });
+      for (const e of entries) if (e.recorder.state !== 'inactive') { try { e.recorder.stop(); } catch (error) { recordingError = String(error.message || error); e.settle(); } }
+      return stopPromise;
+    }
+    function paint(t) {
+      oc.drawImage(video, 0, 0, w, h);
+      const updateComposite = !!edited && t - lastComposite >= 1000 / compositeFps - 2;
+      if (updateComposite) {
+        lastComposite = t; compositeFrames++;
+        ec.drawImage(original, 0, 0);
+        if (eligible && !finished && t >= chosenTime) {
+          if (appearance === undefined) {
+            if (t > maxMs - 1500) { finished = true; reason = 'ghost-space-never-clear'; }
+            else if (spaceClear()) { if (!tuned) tuneLayer(); appearance = t; reason = undefined; }
+            else reason = 'ghost-space-occupied';
+          }
+          if (appearance !== undefined) {
+            const age = t - appearance;
+            if (age >= 1000) finished = true;
+            else if (!spaceClear()) { finished = true; reason = 'ghost-ended-on-occlusion'; }
+            else {
+              ec.save(); ec.globalAlpha = clamp(Math.min((age + 1000 / compositeFps) / 120, (1000 - age) / 160), 0, 1); ec.drawImage(layer, 0, 0); ec.restore(); applied = true;
+            }
+          }
+        }
+      }
+      if (overlay) {
+        hc.clearRect(0, 0, w, h); hc.save();
+        try { overlay(hc, w, h, t); } finally { hc.restore(); }
+        oc.drawImage(hud, 0, 0);
+        if (updateComposite) ec.drawImage(hud, 0, 0);
+      }
+      for (const e of entries) if ((!e.composite || updateComposite) && e.track.requestFrame) e.track.requestFrame();
+    }
+    function tick() {
+      if (stopping) return;
+      const now = performance.now(), t = now - started;
+      if (t >= maxMs) { stop('maxMs'); return; }
+      if (video.ended || video.paused || video.readyState < 2) { stop('camera-interrupted'); return; }
+      if (video.videoWidth !== sourceWidth || video.videoHeight !== sourceHeight) { stop('camera-size-changed'); return; }
+      const gap = now - lastFrame, lost = Math.max(0, Math.round(gap / (1000 / 24)) - 1);
+      missed += lost; windowMissed += lost; frames++; windowFrames++; lastFrame = now;
+      try { paint(t); } catch (e) { recordingError = String(e.message || e); stop('render-error'); return; }
+      if (edited && t - windowStart >= 2000) {
+        const ratio = windowMissed / Math.max(1, windowFrames + windowMissed);
+        if (ratio > .15 && compositeFps > 12) { compositeFps = compositeFps === 24 ? 18 : 12; downgrades.push({ atMs: Math.round(t), compositeFps, droppedFrameRatio: ratio }); }
+        windowStart = t; windowFrames = 0; windowMissed = 0;
+      }
+      frameTimer = setTimeout(tick, Math.max(0, 1000 / 24 - (performance.now() - now)));
+    }
+    try {
+      paint(0);
+      for (const c of [original, edited].filter(Boolean)) {
+        // Manual capture permits reducing composite frame rate without resizing an active encoder.
+        const stream = c.captureStream(0), track = stream.getVideoTracks()[0]; ownedTracks.push(track);
+        if (!track.requestFrame) { ownedTracks.pop(); track.stop(); const fallback = c.captureStream(24); stream.removeTrack(track); stream.addTrack(fallback.getVideoTracks()[0]); ownedTracks.push(...fallback.getTracks()); }
+        if (audioTrack) { const clone = audioTrack.clone(); ownedTracks.push(clone); stream.addTrack(clone); }
+        const recorder = new MediaRecorder(stream, { mimeType: support.recorderMime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 96000 });
+        const chunks = []; let settle;
+        const done = new Promise(resolve => { settle = () => resolve(new Blob(chunks, { type: recorder.mimeType || support.mime })); });
+        const entry = { recorder, done, settle, track: stream.getVideoTracks()[0], composite: c === edited }; entries.push(entry);
+        recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+        recorder.onstop = () => { settle(); if (!stopping) stop('recorder-stopped'); };
+        recorder.onerror = event => { recordingError = event.error ? event.error.message : 'media-recorder-error'; stop('recorder-error'); };
+      }
+      for (const e of entries) e.recorder.start(1000);
+      started = performance.now(); lastFrame = started;
+      listen(document, 'visibilitychange', () => { if (document.hidden) stop('document-hidden'); });
+      listen(window, 'pagehide', () => stop('pagehide'));
+      listen(video, 'pause', () => stop('camera-paused'));
+      listen(video, 'ended', () => stop('camera-ended'));
+      if (video.srcObject && video.srcObject.getVideoTracks) for (const track of video.srcObject.getVideoTracks()) { listen(track, 'ended', () => stop('camera-ended')); listen(track, 'mute', () => stop('camera-muted')); }
+      limitTimer = setTimeout(() => stop('maxMs'), maxMs);
+      tick();
+      return rec;
+    } catch (e) {
+      stopping = true;
+      for (const entry of entries) if (entry.recorder.state !== 'inactive') entry.recorder.stop();
+      cleanup(); throw e;
+    }
+  }
+  window.GhostEngine = { init, status, loadAsset, composite, startVideo, videoSupport, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause } };
 })();

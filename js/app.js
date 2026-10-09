@@ -16,7 +16,7 @@
   let assetState = '확인 전';
   let cur = { group: null, lastId: null };
   let stream = null;
-  let camMode = 'student';      // student | background | test
+  let camMode = 'student';      // student | video | scan | burst | background | test
   let wakeLock = null;
 
   const $ = (id) => document.getElementById(id);
@@ -162,7 +162,8 @@
   function fileName(rec, kind) {
     const d = new Date(rec.takenAt);
     const t = `${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    return `${rec.group}조_${rec.stationName}_${t}_${kind}.jpg`;
+    const seq = rec.seq ? '_' + pad(rec.seq) : '';
+    return `${rec.group}조_${rec.stationName}_${t}${seq}_${kind}.${rec.ext || 'jpg'}`;
   }
 
   // ---------- 귀신 소재 ----------
@@ -205,38 +206,67 @@
     $('confStation').textContent = station().name;
     show('scrConfirm');
   }
+  // 장소 유형: 사진(기본) · 스태킹(영상+제한시간) · 탁구공(영상+개수 입력) · 책찾기(바코드→사진) · 연속사진(10초 뒤 여러 장)
+  const TYPE = {
+    '사진': { btn: '📸 사진 찍으러 가기', lead: '미션을 성공한 순간을 사진으로 남겨요!' },
+    '스태킹': { btn: '🎬 영상 찍으러 가기', lead: '시작을 누르면 시간이 흘러요. 다 쌓고 내리면 "끝!"을 눌러요!' },
+    '탁구공': { btn: '🎬 영상 찍으러 가기', lead: '공을 던지는 모습을 영상으로 남겨요!' },
+    '책찾기': { btn: '🔍 찾은 책 바코드 찍기', lead: '책을 찾으면 바코드를 찍어 확인해요!' },
+    '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요!' }
+  };
+  const stType = () => { const t = String(station().type || '사진').trim(); return TYPE[t] ? t : '사진'; };
+  const stValue = (d) => { const v = parseFloat(station().value); return Number.isFinite(v) && v > 0 ? v : d; };
+  const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationFor(cur.group) === s.id); };
+
   function openMission() {
-    const s = station();
+    const s = station(), t = stType();
     $('misStation').textContent = '📜 ' + s.name + ' 미션';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     $('misGroup').textContent = cur.group + '조';
+    $('misLead').textContent = TYPE[t].lead;
+    $('btnOpenCam').textContent = TYPE[t].btn;
     show('scrMission');
+  }
+  function startStudentCamera() {
+    const t = stType();
+    openCamera(t === '스태킹' || t === '탁구공' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
   }
 
   // ---------- 카메라 ----------
+  const STUDENT_MODES = ['student', 'video', 'scan', 'burst'];
   async function openCamera(mode) {
     camMode = mode;
+    const s = station();
     $('camTop').textContent = mode === 'background' ? '빈 배경 촬영 — 사람이 없게 해 주세요'
-      : mode === 'test' ? '귀신 합성 시험 촬영' : `${cur.group}조 · ${station().name}`;
+      : mode === 'test' ? '귀신 합성 시험 촬영'
+      : mode === 'scan' ? `${cur.group}조 · ${s.name} · 책 확인`
+      : `${cur.group}조 · ${s.name}`;
+    $('camRec').hidden = true; $('camBurst').hidden = true; $('btnStop').hidden = true;
+    $('camScan').hidden = mode !== 'scan';
+    $('btnShutter').hidden = mode === 'scan';
+    $('btnCamCancel').hidden = false;
+    $('camTimerLabel').hidden = mode !== 'student';
     show('scrCamera');
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
+        audio: mode === 'video',
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
       const v = $('camVideo'); v.srcObject = stream; await v.play();
     } catch (e) {
       closeCamera();
       toast('카메라를 열 수 없어요. 선생님께 알려 주세요.', 4000);
-      backFromCamera();
+      return backFromCamera();
     }
+    if (mode === 'scan') startScan();
   }
   function closeCamera() {
+    stopScan();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null; $('camVideo').srcObject = null;
   }
   function backFromCamera() {
-    if (camMode === 'student') show('scrMission'); else openAdmin('tools');
+    if (STUDENT_MODES.includes(camMode)) show('scrMission'); else openAdmin('tools');
   }
   function grabFrame() {
     const v = $('camVideo');
@@ -247,23 +277,28 @@
   }
   const canvasToBlob = (c, q) => new Promise((res) => c.toBlob(res, 'image/jpeg', q || 0.92));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const newId = () => Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  function flash() { const fl = $('camFlash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60); }
+  async function countdown(n, step) {
+    for (let i = n; i > 0; i--) { $('camCount').textContent = i; await sleep(step || 900); }
+    $('camCount').textContent = '';
+  }
 
   let shooting = false;
   async function shoot() {
     if (shooting || !stream) return;
     shooting = true;
     try {
-      if ($('camTimer').checked && camMode === 'student') {
-        for (let i = 3; i > 0; i--) { $('camCount').textContent = i; await sleep(900); }
-        $('camCount').textContent = '';
-      }
+      if (camMode === 'video') return await startVideo();
+      if (camMode === 'burst') return await shootBurst();
+      if ($('camTimer').checked && camMode === 'student') await countdown(3);
       const frame = grabFrame();
-      const fl = $('camFlash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60);
+      flash();
       closeCamera();
       if (camMode === 'background') await saveBackground(frame);
       else if (camMode === 'test') await testComposite(frame);
       else await saveStudentPhoto(frame);
-    } finally { shooting = false; }
+    } finally { if (!recorder) shooting = false; }
   }
 
   async function compose(frame) {
@@ -272,46 +307,237 @@
     catch (e) { return { blob: null, applied: false, reason: 'error: ' + e.message }; }
   }
 
-  async function saveStudentPhoto(frame) {
-    show('scrSaving');
-    const t0 = Date.now();
+  function baseRecord(extra) {
     const s = station();
-    const original = await canvasToBlob(frame);
-    const wantGhost = s.ghost && ghostStationFor(cur.group) === s.id;
-    let composite = null, reason = wantGhost ? '' : 'not-assigned';
-    if (wantGhost) {
-      const r = await compose(frame);
-      if (r.applied && r.blob) composite = r.blob; else reason = r.reason || 'not-applied';
-    }
-    const rec = {
-      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      group: cur.group, stationId: s.id, stationName: s.name, takenAt: Date.now(),
-      original, composite, ghost: !!composite, reason, up: { orig: false, comp: false }
-    };
-    await db.put(rec);
-    cur.lastId = rec.id;
+    return Object.assign({
+      id: newId(), group: cur.group, stationId: s.id, stationName: s.name, takenAt: Date.now(),
+      kind: 'photo', ext: 'jpg', composite: null, ghost: false, reason: '', up: { orig: false, comp: false }
+    }, extra);
+  }
+  async function saveRecords(recs) {
+    for (const r of recs) await db.put(r);
     if (setting('업로드', '자동') === '자동') uploadPending(false);
-    const wait = 1800 - (Date.now() - t0); if (wait > 0) await sleep(wait); // 너무 빨리 끝나면 어색하므로 최소 대기
-    showResult(rec);
+  }
+  async function minWait(t0, ms) { const w = ms - (Date.now() - t0); if (w > 0) await sleep(w); }
+
+  // 사진 1장
+  async function saveStudentPhoto(frame) {
+    show('scrSaving'); $('savingMsg').textContent = '사진을 저장하고 있어요...';
+    const t0 = Date.now();
+    const rec = baseRecord({ original: await canvasToBlob(frame), reason: 'not-assigned' });
+    if (wantGhostHere()) {
+      const r = await compose(frame);
+      if (r.applied && r.blob) { rec.composite = r.blob; rec.ghost = true; rec.reason = ''; } else rec.reason = r.reason || 'not-applied';
+    }
+    await saveRecords([rec]);
+    await minWait(t0, 1800); // 너무 빨리 끝나면 어색하므로 최소 대기
+    showResult({ recs: [rec] });
   }
 
-  function showResult(rec) {
+  // 연속사진: 10초 뒤 n장 (0.5초 간격), 귀신은 그중 한 장
+  async function shootBurst() {
+    const n = Math.min(20, Math.round(stValue(10)));
+    $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
+    await countdown(10, 1000);
+    const frames = [];
+    $('camBurst').hidden = false;
+    for (let i = 0; i < n; i++) {
+      frames.push(grabFrame()); flash();
+      $('camBurst').textContent = `📸 ${i + 1} / ${n}`;
+      if (i < n - 1) await sleep(500);
+    }
+    $('camBurst').hidden = true; $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
+    closeCamera();
+    show('scrSaving'); $('savingMsg').textContent = '사진을 저장하고 있어요...';
+    const t0 = Date.now(), takenAt = Date.now();
+    const recs = [];
+    for (let i = 0; i < n; i++) recs.push(baseRecord({ takenAt, seq: i + 1, original: await canvasToBlob(frames[i]), reason: 'not-assigned' }));
+    if (wantGhostHere()) {
+      // 앞쪽 몇 장은 비우고, 가운데~뒤쪽 중 무작위 한 장부터 차례로 시도
+      const order = [];
+      for (let i = Math.min(3, n - 1); i < n; i++) order.push(i);
+      const start = Math.floor(Math.random() * order.length);
+      let reason = 'not-applied';
+      for (const i of order.slice(start).concat(order.slice(0, start))) {
+        const r = await compose(frames[i]);
+        if (r.applied && r.blob) { recs[i].composite = r.blob; recs[i].ghost = true; reason = ''; break; }
+        reason = r.reason || reason;
+      }
+      recs.forEach((r) => { r.reason = reason; });
+    }
+    await saveRecords(recs);
+    await minWait(t0, 2000);
+    showResult({ recs, burst: true });
+  }
+
+  // 영상 (스태킹·탁구공) — 녹화·귀신 합성은 GhostEngine.startVideo
+  let recorder = null, recTimer = null;
+  async function startVideo() {
+    if (!window.GhostEngine || !GhostEngine.startVideo) { shooting = false; return toast('영상 기능이 아직 준비되지 않았어요', 4000); }
+    const sup = GhostEngine.videoSupport ? GhostEngine.videoSupport() : { ok: true };
+    if (!sup.ok) { shooting = false; return toast('이 기기에서는 영상 녹화가 안 돼요: ' + (sup.reason || ''), 5000); }
+    const t = stType();
+    const limitMs = t === '스태킹' ? stValue(60) * 1000 : 60000;
+    $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
+    await countdown(3);
+    const fmt = (ms) => (ms / 1000).toFixed(1);
+    try {
+      recorder = await GhostEngine.startVideo($('camVideo'), {
+        asset: wantGhostHere() ? asset : null,
+        audioTrack: stream.getAudioTracks()[0] || null,
+        maxMs: limitMs,
+        ghostAtMs: [3000, Math.max(4000, Math.min(9000, limitMs * 0.4))],
+        overlay: t === '스태킹' ? (ctx, w, h, ms) => {
+          const sz = Math.round(h * 0.07);
+          ctx.save(); ctx.font = `800 ${sz}px sans-serif`; ctx.textAlign = 'right';
+          ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(w - sz * 4.6, sz * 0.4, sz * 4.2, sz * 1.3);
+          ctx.fillStyle = '#fff'; ctx.fillText(fmt(Math.min(ms, limitMs)) + '초', w - sz * 0.7, sz * 1.4); ctx.restore();
+        } : null
+      });
+    } catch (e) {
+      recorder = null;
+      $('btnShutter').hidden = false; $('btnCamCancel').hidden = false; shooting = false;
+      return toast('녹화를 시작할 수 없어요: ' + e.message, 5000);
+    }
+    $('camRec').hidden = false; $('btnStop').hidden = false;
+    recTimer = setInterval(() => {
+      if (!recorder) return;
+      const ms = recorder.elapsed();
+      if (t === '스태킹') {
+        $('camRecTime').textContent = fmt(Math.min(ms, limitMs)) + ' / ' + Math.round(limitMs / 1000) + '초';
+        $('camRec').classList.toggle('warn', limitMs - ms < 10000);
+      } else $('camRecTime').textContent = fmt(ms) + '초';
+    }, 100);
+    // 모든 종료(끝 버튼·제한시간·탭 숨김)에 한 번만 저장
+    recorder.onstop = (r) => finishVideo(r, !!(r.stats && r.stats.stopReason === 'maxMs'));
+  }
+  let finishing = false;
+  async function finishVideo(result, auto) {
+    if (finishing || !recorder) return;
+    finishing = true;
+    clearInterval(recTimer);
+    const rec0 = recorder;
+    $('camRec').hidden = true; $('btnStop').hidden = true; $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
+    show('scrSaving'); $('savingMsg').textContent = '영상을 저장하고 있어요...';
+    const t0 = Date.now();
+    try {
+      const r = result || await rec0.stop();
+      recorder = null;
+      closeCamera();
+      const t = stType();
+      const limitMs = stValue(60) * 1000;
+      const rec = baseRecord({
+        kind: 'video', ext: r.ext || 'webm', original: r.original, durationMs: r.durationMs,
+        composite: r.applied && r.composite ? r.composite : null, ghost: !!(r.applied && r.composite),
+        reason: wantGhostHere() ? (r.applied ? '' : r.reason || 'not-applied') : 'not-assigned'
+      });
+      if (t === '스태킹') { rec.success = !auto && r.durationMs <= limitMs; rec.timeMs = Math.min(r.durationMs, limitMs); }
+      await saveRecords([rec]);
+      await minWait(t0, 1500);
+      showResult({ recs: [rec], video: true, stacking: t === '스태킹', pingpong: t === '탁구공' });
+    } catch (e) {
+      recorder = null;
+      toast('영상 저장에 실패했어요: ' + e.message, 5000);
+      closeCamera(); show('scrMission');
+    } finally { finishing = false; shooting = false; }
+  }
+
+  // 책찾기: 바코드 인식 또는 번호 입력 → 맞으면 책과 함께 인증사진
+  let scanTimer = null, detector = null, lastBad = '';
+  const normCode = (x) => String(x || '').toUpperCase().replace(/[\s\-_.]/g, '');
+  const bookAnswers = () => String(station().value || '').split(/[,\n]/).map(normCode).filter(Boolean);
+  function setScanMsg(msg, cls) { const m = $('scanMsg'); m.textContent = msg; m.className = 'scan-msg' + (cls ? ' ' + cls : ''); }
+  function checkBook(code, typed) {
+    const c = normCode(code);
+    if (!c) return false;
+    const answers = bookAnswers();
+    if (!answers.length || answers.includes(c)) { bookFound(); return true; }
+    if (c !== lastBad || typed) { lastBad = c; setScanMsg(`이 책이 아니에요! (${code}) 다시 찾아봐요`, 'bad'); }
+    return false;
+  }
+  function startScan() {
+    lastBad = ''; $('scanInput').value = '';
+    setScanMsg('책 뒤의 바코드를 네모 안에 비춰 주세요');
+    if (!('BarcodeDetector' in window)) { setScanMsg('바코드 아래 번호를 입력해 주세요'); return; }
+    try { detector = new BarcodeDetector({ formats: ['code_39', 'code_128', 'ean_13', 'ean_8', 'codabar', 'itf', 'qr_code', 'upc_a'] }); }
+    catch (e) { setScanMsg('바코드 아래 번호를 입력해 주세요'); return; }
+    let busy = false;
+    scanTimer = setInterval(async () => {
+      if (busy || !stream) return; busy = true;
+      try { const codes = await detector.detect($('camVideo')); for (const b of codes) if (checkBook(b.rawValue)) break; }
+      catch (e) {} finally { busy = false; }
+    }, 300);
+  }
+  function stopScan() { clearInterval(scanTimer); scanTimer = null; }
+  async function bookFound() {
+    stopScan();
+    setScanMsg('📗 찾았어요! 이제 책과 함께 인증사진을 찍어요', 'good');
+    await sleep(1600);
+    camMode = 'student';
+    $('camScan').hidden = true; $('btnShutter').hidden = false; $('camTimerLabel').hidden = false;
+    $('camTop').textContent = `${cur.group}조 · ${station().name} · 찾은 책을 들고 찍어요`;
+  }
+
+  // ---------- 결과 ----------
+  const resUrls = [];
+  let lastResult = null;
+  function showResult(res) {
+    lastResult = res;
     const s = station();
     const mode = (s.reveal || setting('공개방식', '즉시')).trim();
-    const img = $('resPhoto');
-    if (img.src) URL.revokeObjectURL(img.src);
+    resUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+    const url = (b) => { const u = URL.createObjectURL(b); resUrls.push(u); return u; };
+    const pick = (r) => (mode === '원본' ? r.original : (r.composite || r.original));
+    const rec = res.recs[0];
     $('resGroup').textContent = rec.group + '조';
+    $('resPhoto').hidden = true; $('resVideo').hidden = true; $('resVideo').removeAttribute('src');
+    $('resPhotoBox').hidden = true; $('resBurst').hidden = true; $('resCount').hidden = true;
+    let title = '🎉 미션 성공!', msg = res.video ? '영상이 저장됐어요' : '사진이 저장됐어요', success = true;
+
     if (mode === '숨김') {
-      $('resPhotoBox').hidden = true;
-      $('resMsg').textContent = '📸 사진이 안전하게 저장됐어요! 나중에 선생님과 함께 봐요.';
+      msg = (res.video ? '🎬 영상이' : '📸 사진이') + ' 안전하게 저장됐어요! 나중에 선생님과 함께 봐요.';
+    } else if (res.burst) {
+      const g = $('resBurst'); g.innerHTML = ''; g.hidden = false;
+      res.recs.forEach((r) => { const im = document.createElement('img'); im.src = url(pick(r)); im.onclick = () => openModal(pick(r)); g.appendChild(im); });
+      msg = `인증사진 ${res.recs.length}장이 저장됐어요`;
+    } else if (res.video) {
+      $('resPhotoBox').hidden = false; $('resVideo').hidden = false; $('resVideo').src = url(pick(rec));
     } else {
-      $('resPhotoBox').hidden = false;
-      img.src = URL.createObjectURL(mode === '원본' ? rec.original : (rec.composite || rec.original));
-      $('resMsg').textContent = '사진이 저장됐어요';
+      $('resPhotoBox').hidden = false; $('resPhoto').hidden = false; $('resPhoto').src = url(pick(rec));
     }
-    $('resClue').hidden = !s.clue;
-    $('resClueText').textContent = s.clue || '';
+    if (res.stacking) {
+      success = !!rec.success;
+      title = success ? `🎉 ${(rec.timeMs / 1000).toFixed(1)}초! 미션 성공!` : '⏰ 시간 초과! 아깝다!';
+      if (!success) msg = '다시 도전해 볼까요?';
+    }
+    if (res.pingpong) {
+      success = false; title = '🏓 몇 개 넣었나요?'; msg = '영상을 보고 확인해요';
+      $('resCount').hidden = false;
+      const btns = $('resCountBtns'); btns.innerHTML = '';
+      const need = Math.round(stValue(3));
+      for (let n = 0; n <= 5; n++) {
+        const b = document.createElement('button'); b.className = 'btn ghost'; b.textContent = n;
+        b.onclick = async () => {
+          rec.count = n; rec.success = n >= need; await db.put(rec);
+          $('resCount').hidden = true;
+          $('resTitle').textContent = rec.success ? `🎉 ${n}개! 미션 성공!` : `😢 ${n}개… 아깝다!`;
+          $('resMsg').textContent = rec.success ? '영상이 저장됐어요' : `${need}개 이상 넣어야 해요. 다시 도전해 볼까요?`;
+          setClue(rec.success, true);
+        };
+        btns.appendChild(b);
+      }
+    }
+    $('resTitle').textContent = title;
+    $('resMsg').textContent = msg;
+    setClue(success, !res.pingpong);
     show('scrResult');
+  }
+  function setClue(success, decided) {
+    const s = station();
+    $('resClue').hidden = !(success && s.clue);
+    $('resClueText').textContent = s.clue || '';
+    $('btnDone').hidden = !success;           // 성공해야 완료 가능
+    $('btnRetake').hidden = !decided;         // 탁구공은 개수를 고른 뒤에 버튼 표시
   }
 
   async function saveBackground(frame) {
@@ -413,13 +639,16 @@
     thumbUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
     const recs = (await db.all()).sort((a, b) => b.takenAt - a.takenAt);
     const pend = recs.filter(needsUpload).length;
-    setStatus('galStatus', `사진 ${recs.length}장 (수정본 ${recs.filter((r) => r.ghost).length}장) · 드라이브 대기 ${pend}장`);
+    setStatus('galStatus', `사진·영상 ${recs.length}개 (수정본 ${recs.filter((r) => r.ghost).length}장) · 드라이브 대기 ${pend}장`);
     const g = $('gallery'); g.innerHTML = '';
     recs.forEach((r) => {
       const u = URL.createObjectURL(r.composite || r.original); thumbUrls.push(u);
       const d = document.createElement('div'); d.className = 'gitem';
       const t = new Date(r.takenAt);
-      d.innerHTML = `<img src="${u}" alt=""><div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())}<br>` +
+      const media = r.kind === 'video' ? `<video src="${u}#t=0.5" muted preload="metadata"></video>` : `<img src="${u}" alt="">`;
+      const info = (r.kind === 'video' ? '🎬 ' : '') + (r.seq ? `#${r.seq} ` : '') +
+        (r.timeMs ? `${(r.timeMs / 1000).toFixed(1)}초 ` : '') + (r.count != null ? `공 ${r.count}개 ` : '');
+      d.innerHTML = `${media}<div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())} ${info}<br>` +
         `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;
       d.onclick = () => openRecord(r);
       g.appendChild(d);
@@ -427,24 +656,32 @@
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+  let modalUrl = null;
+  function setModalMedia(blob) {
+    if (modalUrl) URL.revokeObjectURL(modalUrl);
+    modalUrl = URL.createObjectURL(blob);
+    const isVideo = /^video\//.test(blob.type);
+    const img = $('modalImg'), vid = $('modalVideo');
+    img.hidden = isVideo; vid.hidden = !isVideo;
+    if (isVideo) { img.removeAttribute('src'); vid.src = modalUrl; } else { vid.pause(); vid.removeAttribute('src'); img.src = modalUrl; }
+  }
   function openModal(blob, label, extraBtns) {
-    const img = $('modalImg'); if (img.src) URL.revokeObjectURL(img.src);
-    img.src = URL.createObjectURL(blob);
+    setModalMedia(blob);
     const btns = $('modalBtns'); btns.innerHTML = '';
     if (label) { const s = document.createElement('span'); s.className = 'hd-sub'; s.textContent = label; btns.appendChild(s); }
     (extraBtns || []).forEach((b) => btns.appendChild(b));
     const c = document.createElement('button'); c.className = 'btn sm'; c.textContent = '닫기';
-    c.onclick = () => { $('modal').hidden = true; }; btns.appendChild(c);
+    c.onclick = () => { $('modalVideo').pause(); $('modal').hidden = true; }; btns.appendChild(c);
     $('modal').hidden = false;
   }
   function openRecord(r) {
-    if (!r.composite) return openModal(r.original, `원본 · ${r.reason ? '귀신 없음(' + r.reason + ')' : ''}`);
+    if (!r.composite) return openModal(r.original, '원본' + (r.reason && r.reason !== 'not-assigned' ? ` · 수정 안 됨(${r.reason})` : ''));
     const toggle = document.createElement('button'); toggle.className = 'btn sm ghost';
     let showComp = true;
     toggle.textContent = '원본 보기';
     toggle.onclick = () => {
       showComp = !showComp;
-      $('modalImg').src = URL.createObjectURL(showComp ? r.composite : r.original);
+      setModalMedia(showComp ? r.composite : r.original);
       toggle.textContent = showComp ? '원본 보기' : '수정본 보기';
     };
     openModal(r.composite, '수정본', [toggle]);
@@ -515,10 +752,13 @@
     document.querySelectorAll('[data-go="home"]').forEach((b) => { b.onclick = goHome; });
     $('btnSetupAdmin').onclick = openPin;
     $('btnConfirmYes').onclick = openMission;
-    $('btnOpenCam').onclick = () => openCamera('student');
+    $('btnOpenCam').onclick = startStudentCamera;
     $('btnShutter').onclick = shoot;
     $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };
-    $('btnRetake').onclick = () => openCamera('student');
+    $('btnRetake').onclick = startStudentCamera;
+    $('btnStop').onclick = () => finishVideo(null, false);
+    $('btnScanOk').onclick = () => checkBook($('scanInput').value, true);
+    $('scanInput').onkeydown = (e) => { if (e.key === 'Enter') checkBook($('scanInput').value, true); };
     $('btnDone').onclick = goHome;
     $('btnPinCancel').onclick = goHome;
     $('btnAdminExit').onclick = goHome;
