@@ -70,8 +70,13 @@ td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
     <div>
       <section class="panel">
         <h2>조별 진행</h2>
-        <p class="help">✅ 성공 · ❌ 실패(도전 횟수) · 👻 이 조의 수정 장소 · ★ 수정본 완료 · ⏳ 수정 대기/편집 중</p>
+        <p class="help">😱 너무 무서움 · 😬 조금 · 😎 안 무서움(소리+수정 2곳) · ✅ 성공 · ❌ 실패 · 👻 수정 장소 · ★ 수정본 완료 · ⏳ 수정 대기</p>
         <div class="tablewrap"><table id="progress"></table></div>
+      </section>
+      <section class="panel">
+        <h2>무서움 강도 설정</h2>
+        <p class="help">출발할 때 학생들이 고른 답에 따라 귀신과 소리를 다르게 합니다. 저장하면 모든 태블릿이 1분 안에 따릅니다.</p>
+        <div id="intensityPanel"></div>
       </section>
       <section class="panel">
         <h2>영상 편집 (노트북)</h2>
@@ -101,6 +106,8 @@ td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
   </div>
 </main>
 <script src="js/ghost-engine.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/intensity.js"></script>
 <script src="js/teacher.js"></script>
 </body>
 </html>

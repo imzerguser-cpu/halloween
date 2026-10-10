@@ -74,10 +74,12 @@
   })();
 
   // ---------- 조(팀): 출발 장소에서 번호를 붙이고, 다른 장소는 출발 순서를 따른다 ----------
-  // 이름은 다루지 않는다. 조마다 {size 인원, young 1·2학년 있음, time 출발 시각} 만 둔다.
+  // 이름은 다루지 않는다. 조마다 {size 인원, young 1·2학년 있음, fear 0 너무 무서움·1 조금·2 안 무서움, time 출발 시각} 만 둔다.
   const LS_TEAMS = 'hg_teams', LS_COUNTER = 'hg_counter', LS_CHECKINS = 'hg_checkins';
   let teams = readLS(LS_TEAMS) || {};           // { [조]: {size, young, time} }
   const saveTeams = () => writeLS(LS_TEAMS, teams);
+  const pickMode = () => setting('조선정', '자동') === '선택';     // 자동 = 출발 장소에서 번호 자동 / 선택 = 장소마다 조 번호 누르기
+  const teamCount = () => Math.max(1, Math.min(40, parseInt(setting('조수', '12'), 10) || 12));
   const startStationId = () => setting('출발장소', '') || (cache.stations[0] && cache.stations[0].id) || '';
   const isStartStation = () => !!station() && station().id === startStationId();
   const visitedKey = () => 'hg_visited_' + (conf.stationId || '');
@@ -94,7 +96,7 @@
     // 시트가 기준. 단, 출발 장소 태블릿이 아직 못 올린 조는 지우지 않는다
     const pending = new Set((readLS(LS_CHECKINS) || []).map((c) => c.group));
     const next = {};
-    list.forEach((t) => { next[t.group] = { size: t.size, young: !!t.young, time: t.time }; });
+    list.forEach((t) => { next[t.group] = { size: t.size, young: !!t.young, fear: t.fear == null ? 1 : t.fear, time: t.time }; });
     Object.keys(teams).forEach((g) => { if (pending.has(Number(g)) && !next[g]) next[g] = teams[g]; });
     teams = next; saveTeams();
   }
@@ -115,24 +117,25 @@
     for (const c of q.slice()) {
       try {
         const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ key: conf.apiKey, action: 'checkin', group: c.group, size: c.size, young: c.young }) });
+          body: JSON.stringify({ key: conf.apiKey, action: 'checkin', group: c.group, size: c.size, young: c.young, fear: c.fear }) });
         const j = await r.json();
         if (!j.ok) break;
         q = q.filter((x) => x.group !== c.group); writeLS(LS_CHECKINS, q);
       } catch (e) { break; }
     }
   }
-  function newTeam(size, young) {
+  function newTeam(size, young, fear, fixed) {
     const max = Math.max(0, readLS(LS_COUNTER) || 0, ...Object.keys(teams).map(Number));
-    const g = max + 1;
-    writeLS(LS_COUNTER, g);
-    teams[g] = { size, young, time: new Date().toISOString() }; saveTeams();
+    const g = Number.isInteger(fixed) && fixed > 0 ? fixed : max + 1;   // 직접 고르기 모드는 학생이 고른 번호
+    writeLS(LS_COUNTER, Math.max(max, g));
+    teams[g] = { size, young, fear, time: new Date().toISOString() }; saveTeams();
     const q = (readLS(LS_CHECKINS) || []).filter((c) => c.group !== g);
-    q.push({ group: g, size, young }); writeLS(LS_CHECKINS, q);
+    q.push({ group: g, size, young, fear }); writeLS(LS_CHECKINS, q);
     flushCheckins();
     return g;
   }
   setInterval(flushCheckins, 20000);
+  setInterval(() => { if (!$('scrHome').hidden) loadRoster(true); }, 60000);   // 관리자가 바꾼 강도 설정 반영
   window.addEventListener('online', flushCheckins);
 
   // ---------- 귀신 배정 ----------
@@ -144,15 +147,35 @@
   function ghostStations() {
     return cache.stations.filter((s) => s.ghost).map((s) => s.id).sort();
   }
-  /** 이 조의 귀신 장소 id (없으면 null). 정보가 없는 조(출발 기록을 못 받음)는 안전하게 귀신 없음 */
-  function ghostStationFor(group) {
+  /** 이 조에 귀신이 나오는 장소 id 목록.
+   *  1·2학년 있음 / 너무 무서움 / 귀신제외조 / 출발 기록을 모르는 조 → 없음
+   *  장소 수는 무서움 정도별 강도 설정(귀신수_너무/조금/안무서움). 장소는 귀신시드로 섞어 모든 태블릿이 같은 답을 낸다 */
+  function ghostStationsFor(group) {
     const t = teams[group];
-    if (!t || t.young) return null;
-    if (setting('귀신제외조', '').split(/[,\s]+/).map(Number).includes(group)) return null;
-    const list = ghostStations();
-    if (!list.length) return null;
-    return list[fnv1a(setting('귀신시드', '0') + ':' + group) % list.length];
+    if (!t || t.young) return [];   // 1·2학년 있음 / 출발 기록을 모르는 조
+    if (setting('귀신제외조', '').split(/[,\s]+/).map(Number).includes(group)) return [];
+    const seed = setting('귀신시드', '0');
+    const list = ghostStations().sort((a, b) => fnv1a(seed + ':' + group + ':' + a) - fnv1a(seed + ':' + group + ':' + b));
+    return list.slice(0, window.Intensity ? Intensity.ghostCount(cache.settings, t.fear) : 1);
   }
+  const teamFear = (group) => { const t = teams[group]; return !t || t.young ? null : t.fear == null ? 1 : t.fear; };
+
+  // ---------- 효과음: 조의 무서움 정도별 강도 설정을 따른다 ----------
+  let spookTimer = null, loudTimer = null;
+  const sfxOn = () => { const f = teamFear(cur.group); return !!(window.Sfx && window.Intensity) && f != null && Intensity.softOn(cache.settings, f); };
+  const loudOn = () => { const f = teamFear(cur.group); return !!(window.Sfx && window.Intensity) && f != null && Intensity.loudOn(cache.settings, f); };
+  const sfxVol = () => (window.Intensity ? Intensity.softVol(cache.settings) : 0.6);
+  const loudVol = () => (window.Intensity ? Intensity.loudVol(cache.settings) : 1);
+  /** 은은한 소리로 긴장시키고, 큰 소리가 켜져 있으면 3~6초 뒤 쾅! */
+  function scheduleSpook(minMs, maxMs, name) {
+    clearTimeout(spookTimer); clearTimeout(loudTimer);
+    const soft = sfxOn(), loud = loudOn();
+    if (!soft && !loud) return;
+    const at = minMs + Math.random() * Math.max(0, maxMs - minMs);
+    if (soft) spookTimer = setTimeout(() => { if (stream) Sfx.play(name, sfxVol()); }, at);
+    if (loud) loudTimer = setTimeout(() => { if (stream) Sfx.loud(null, loudVol()); }, soft ? at + 3000 + Math.random() * 3000 : at);
+  }
+  document.addEventListener('pointerdown', () => { if (window.Sfx) Sfx.unlock(); });
 
   // ---------- 구글 시트 ----------
   async function loadRoster(silent) {
@@ -172,6 +195,8 @@
       return false;
     }
   }
+
+  function setStatus(id, msg, cls) { const el = $(id); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : ''); }
 
   // ---------- 드라이브 업로드 ----------
   function blobToB64(blob) {
@@ -260,6 +285,13 @@
     $('homeStation').textContent = s.name;
     $('homeGrid').hidden = true;
     clearInterval(orderTimer);
+    if (pickMode()) {
+      // 조 번호 직접 고르기: 출발 장소는 번호 → 인원·질문, 다른 장소는 번호만
+      $('homeStart').hidden = true; $('homeNext').hidden = true;
+      $('homeLead').textContent = '';
+      showTeamGrid(true);
+      return;
+    }
     if (isStartStation()) {
       $('homeStart').hidden = false; $('homeNext').hidden = true;
       $('homeLead').textContent = '모두 모였으면 시작해요!';
@@ -286,21 +318,22 @@
     orderTimer = setInterval(() => { if ($('scrHome').hidden) return clearInterval(orderTimer); loadOrder().then(draw); }, 5000);
   }
   // "다른 조예요": 알고 있는 조 번호(없으면 1~12)에서 고르기
-  function showTeamGrid() {
+  function showTeamGrid(all) {
     const grid = $('groupGrid'); grid.innerHTML = '';
     const v = visited();
     const known = Object.keys(teams).map(Number).sort((a, b) => a - b);
-    const nums = known.length ? known : Array.from({ length: 12 }, (_, i) => i + 1);
+    const nums = all || !known.length ? Array.from({ length: teamCount() }, (_, i) => i + 1) : known;
     nums.forEach((g) => {
       const b = document.createElement('button');
       b.className = 'gbtn' + (v.has(teamTag(g)) ? ' done' : '');
       b.innerHTML = `${g}<small>조</small>`;
-      b.onclick = () => startTeam(g);
+      b.onclick = () => (pickMode() && isStartStation() ? openTeamSetup(g) : startTeam(g));
       grid.appendChild(b);
     });
     $('homeGrid').hidden = false;
   }
   function startTeam(g) {
+    if (pickMode() && !teams[g]) loadOrder();          // 출발 장소에서 등록한 정보(저학년·무서움)를 받아 둔다
     clearInterval(orderTimer);
     cur.group = g;
     markVisited(g);
@@ -309,18 +342,23 @@
 
   // 출발 장소: 인원 → (1·2학년?) → 조 번호 안내 → 미션
   let teamDraft = {};
-  function openTeamSetup() {
-    teamDraft = {};
-    $('teamAskSize').hidden = false; $('teamAskYoung').hidden = true; $('teamDone').hidden = true;
+  function openTeamSetup(fixed) {
+    teamDraft = { fixed: fixed || null };
+    $('teamAskSize').hidden = false; $('teamAskYoung').hidden = true; $('teamAskFear').hidden = true; $('teamDone').hidden = true;
     show('scrTeam');
   }
   function pickSize(n) {
     teamDraft.size = n;
-    if (setting('저학년질문', '예') === '아니오') return finishTeam(false);
+    if (setting('저학년질문', '예') === '아니오') return answerYoung(false);
     $('teamAskSize').hidden = true; $('teamAskYoung').hidden = false;
   }
-  async function finishTeam(young) {
-    const g = newTeam(teamDraft.size, young);
+  function answerYoung(young) {
+    if (young || setting('무서움질문', '예') === '아니오') return finishTeam(young, young ? null : 1);
+    $('teamAskYoung').hidden = true; $('teamAskFear').hidden = false;
+  }
+  async function finishTeam(young, fear) {
+    const g = newTeam(teamDraft.size, young, fear, teamDraft.fixed);
+    $('teamAskFear').hidden = true;
     cur.group = g; markVisited(g);
     $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamDone').hidden = false;
     $('teamNum').textContent = g + '조';
@@ -339,7 +377,7 @@
   };
   const stType = () => { const t = String(station().type || '사진').trim(); return TYPE[t] ? t : '사진'; };
   const stValue = (d) => { const v = parseFloat(station().value); return Number.isFinite(v) && v > 0 ? v : d; };
-  const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationFor(cur.group) === s.id); };
+  const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationsFor(cur.group).includes(s.id)); };
 
   function openMission() {
     const s = station(), t = stType();
@@ -384,9 +422,11 @@
       return backFromCamera();
     }
     if (mode === 'scan') startScan();
+    if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000);
   }
   function closeCamera() {
     stopScan();
+    clearTimeout(spookTimer); clearTimeout(loudTimer);
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null; $('camVideo').srcObject = null;
   }
@@ -523,6 +563,7 @@
     recorder = { mr, done, limitMs, auto: false };
     mr.start(1000);
     recStart = performance.now();
+    scheduleSpook(3000, Math.max(3500, Math.min(9000, limitMs - 2000)));   // 녹화 중에 나서 영상에도 담긴다
     $('camRec').hidden = false; $('btnStop').hidden = false;
     const fmt = (ms) => (ms / 1000).toFixed(1);
     recTimer = setInterval(() => {
@@ -708,6 +749,7 @@
     $('resMsg').textContent = msg;
     setClue(success, !res.pingpong);
     show('scrResult');
+    if (sfxOn() && mode !== '숨김' && mode !== '원본' && res.recs.some((r) => r.composite)) setTimeout(() => Sfx.play('whisper', sfxVol() * 0.7), 1500);
     armIdleHome();
   }
   // 결과 화면에서 2분 동안 아무도 안 누르면 대기 화면으로 (학생이 완료를 안 누르고 떠난 경우)
@@ -805,6 +847,22 @@
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
     if (name === 'tools') renderDiag();
+    if (name === 'level') renderIntensity();
+  }
+
+  function renderIntensity() {
+    if (!window.Intensity) return;
+    Intensity.render($('intensityPanel'), cache.settings, {
+      stationCount: ghostStations().length,
+      onSave: async (o) => {
+        if (!conf.apiUrl || !conf.apiKey) throw new Error('먼저 구글 시트를 연결하세요');
+        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ key: conf.apiKey, action: 'settings', settings: o }) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || '응답 오류');
+        cache.settings = j.settings; writeLS(LS_CACHE, cache);
+      }
+    });
   }
 
   function renderGhostTable() {
@@ -813,10 +871,14 @@
     const nums = Object.keys(teams).map(Number).sort((a, b) => a - b);
     let h = `<p>귀신 장소 후보: ${list.length ? list.map(nameOf).join(', ') : '없음 (시트 장소 탭의 귀신=예)'}</p>`;
     if (!nums.length) { $('ghostTable').innerHTML = h + '<p>아직 출발한 조가 없어요. 출발 장소에서 조가 시작하면 여기에 나타나요.</p>'; return; }
-    h += '<table class="t"><tr><th>조</th><th>인원</th><th>귀신 장소</th><th>비고</th></tr>';
+    const FEAR = ['😱 너무 무서움', '😬 조금', '😎 안 무서움'];
+    h += '<table class="t"><tr><th>조</th><th>인원</th><th>무서움</th><th>귀신 장소</th><th>비고</th></tr>';
     nums.forEach((g) => {
-      const st = ghostStationFor(g), t = teams[g];
-      h += `<tr><td>${g}조</td><td>${t.size ? t.size + '명' : ''}</td><td>${st ? '👻 ' + nameOf(st) : '—'}</td><td>${t.young ? '1·2학년 있음 → 제외' : st === null && list.length ? '귀신제외조' : ''}</td></tr>`;
+      const sts = ghostStationsFor(g), t = teams[g];
+      const f = t.young ? null : t.fear == null ? 1 : t.fear;
+      const sound = f != null && window.Intensity ? [Intensity.softOn(cache.settings, f) && '은은한 소리', Intensity.loudOn(cache.settings, f) && '큰 소리'].filter(Boolean).join('·') : '';
+      const note = t.young ? '1·2학년 있음 → 제외' : !sts.length && list.length ? (Intensity.ghostCount(cache.settings, f) === 0 ? '귀신 0곳 설정' : '귀신제외조') : sound;
+      h += `<tr><td>${g}조</td><td>${t.size ? t.size + '명' : ''}</td><td>${t.young ? '—' : FEAR[t.fear == null ? 1 : t.fear]}</td><td>${sts.length ? sts.map((x) => '👻 ' + nameOf(x)).join(', ') : '—'}</td><td>${note}</td></tr>`;
     });
     $('ghostTable').innerHTML = h + '</table>';
   }
@@ -949,12 +1011,13 @@
   function bind() {
     document.querySelectorAll('[data-go="home"]').forEach((b) => { b.onclick = goHome; });
     $('btnSetupAdmin').onclick = openPin;
-    $('btnTeamStart').onclick = openTeamSetup;
+    $('btnTeamStart').onclick = () => openTeamSetup();
     $('btnNextGo').onclick = () => { const g = nextTeam(); if (g) startTeam(g); };
     $('btnOtherTeam').onclick = showTeamGrid;
     document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });
-    $('btnYoungYes').onclick = () => finishTeam(true);
-    $('btnYoungNo').onclick = () => finishTeam(false);
+    $('btnYoungYes').onclick = () => answerYoung(true);
+    $('btnYoungNo').onclick = () => answerYoung(false);
+    document.querySelectorAll('[data-fear]').forEach((b) => { b.onclick = () => finishTeam(false, Number(b.dataset.fear)); });
     $('btnResetTeams').onclick = resetTeams;
     $('btnOpenCam').onclick = startStudentCamera;
     $('btnShutter').onclick = shoot;

@@ -40,19 +40,34 @@
   function excludedGroups() {
     const st = roster.settings || {};
     const ex = new Set(String(st['귀신제외조'] || '').split(/[,\s]+/).map(Number).filter(Boolean));
-    roster.groups.forEach((g) => { if (g.young) ex.add(g.group); });
+    roster.groups.forEach((g) => { if (g.young || Intensity.ghostCount(roster.settings, g.fear) === 0) ex.add(g.group); });
     return ex;
   }
-  function ghostStationFor(group, ex) {
-    if (ex.has(group)) return null;
-    const list = roster.stations.filter((s) => s.ghost).map((s) => s.id).sort();
-    if (!list.length) return null;
-    return list[fnv1a(String((roster.settings || {})['귀신시드'] || '0') + ':' + group) % list.length];
+  /** 태블릿 앱과 같은 계산: 무서움 정도별 강도 설정의 귀신 장소 수 */
+  function ghostStationsFor(g, ex) {
+    if (ex.has(g.group)) return [];
+    const st = roster.settings || {}, seed = String(st['귀신시드'] || '0');
+    const list = roster.stations.filter((s) => s.ghost).map((s) => s.id).sort()
+      .sort((a, b) => fnv1a(seed + ':' + g.group + ':' + a) - fnv1a(seed + ':' + g.group + ':' + b));
+    return list.slice(0, Intensity.ghostCount(st, g.fear));
   }
 
   // ---------- 불러오기 ----------
+  let intensityDrawn = '';
+  function drawIntensity() {
+    const key = JSON.stringify(roster.settings) + roster.stations.length;
+    if (key === intensityDrawn) return;
+    const el = $('intensityPanel');
+    if (el.contains(document.activeElement)) return;      // 고치는 중에는 다시 그리지 않음
+    intensityDrawn = key;
+    Intensity.render(el, roster.settings, {
+      stationCount: roster.stations.filter((s) => s.ghost).length,
+      onSave: async (o) => { const j = await post({ action: 'settings', settings: o }); roster.settings = j.settings; intensityDrawn = JSON.stringify(j.settings) + roster.stations.length; render(); }
+    });
+  }
   async function loadRoster() {
     roster = await get({ action: 'roster' });
+    drawIntensity();
     const sel = $('manStation'), keep = sel.value;
     const opts = roster.stations.filter((s) => s.ghost).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
     if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; if (keep) sel.value = keep; }
@@ -91,10 +106,12 @@
     const st = roster.stations;
     let h = '<tr><th>조</th><th>인원·출발</th>' + st.map((s) => `<th>${esc(s.name)}</th>`).join('') + '</tr>';
     roster.groups.forEach((g) => {
-      const ghostAt = ghostStationFor(g.group, ex);
+      const ghostAt = ghostStationsFor(g, ex);
+      const FEAR = ['😱', '😬', '😎'];
       const t = g.time ? new Date(g.time) : null;
       const when = t && !isNaN(t) ? `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')} 출발` : '';
-      h += `<tr><td><b>${g.group}조</b>${ex.has(g.group) ? `<br><span class="tag x">${g.young ? '1·2학년' : '제외'}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
+      const why = g.young ? '1·2학년' : Intensity.ghostCount(roster.settings, g.fear) === 0 ? '귀신 0곳' : '제외';
+      h += `<tr><td><b>${g.group}조</b> ${g.young ? '' : FEAR[g.fear == null ? 1 : g.fear]}${ex.has(g.group) ? `<br><span class="tag x">${why}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
       st.forEach((s) => {
         const mine = list.filter((r) => Number(r['조']) === g.group && r['장소id'] === s.id);
         const orig = mine.filter((r) => r['구분'] === '원본');
@@ -110,7 +127,7 @@
         else cell = `<span class="st-bad">❌</span>`;
         if (fails) cell += `<span class="st-bad" style="font-size:12px">실패 ${fails}회</span>`;
         let tags = '';
-        if (ghostAt === s.id) tags += '<span class="tag g">👻</span> ';
+        if (ghostAt.includes(s.id)) tags += '<span class="tag g">👻</span> ';
         const vids = orig.filter((r) => r['종류'] === '영상' && r['편집']);
         if (edited.length) tags += '<span class="tag u">★ 수정</span>';
         else if (vids.some((r) => r['편집'] === '대기')) tags += '<span class="tag w">⏳ 수정 대기</span>';

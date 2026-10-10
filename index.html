@@ -94,6 +94,7 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 .next-card{text-align:center;max-width:520px;margin:0 auto}
 .next-team{font-family:'Nanum Myeongjo',serif;font-size:96px;font-weight:800;color:var(--gold-lt);line-height:1.1;text-shadow:0 4px 18px rgba(0,0,0,.7)}
 .size-btn{font-size:30px;min-width:150px;padding:22px 26px}
+.fear-btn{font-size:24px;line-height:1.35;min-width:200px}
 .spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:30px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* admin */
@@ -187,6 +188,15 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
       <div class="row center" style="margin-top:18px">
         <button class="btn size-btn" id="btnYoungYes">네, 있어요</button>
         <button class="btn size-btn" id="btnYoungNo">아니요</button>
+      </div>
+    </div>
+    <div class="card" style="text-align:center" id="teamAskFear" hidden>
+      <h2 class="big-title" style="font-size:30px">지금 얼마나 무서워요?</h2>
+      <p class="lead" style="margin:6px 0 0">가장 무서워하는 친구 기준으로 골라요</p>
+      <div class="row center" style="margin-top:18px">
+        <button class="btn size-btn fear-btn" data-fear="0">😱<br>너무 무서워요</button>
+        <button class="btn size-btn fear-btn" data-fear="1">😬<br>조금 무서워요</button>
+        <button class="btn size-btn fear-btn" data-fear="2">😎<br>하나도 안 무서워요</button>
       </div>
     </div>
     <div class="card" style="text-align:center" id="teamDone" hidden>
@@ -283,6 +293,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   <div class="wrap">
     <div class="tabs" id="adminTabs">
       <button class="tab on" data-tab="conn">연결·장소</button>
+      <button class="tab" data-tab="level">강도 설정</button>
       <button class="tab" data-tab="ghost">귀신 배정</button>
       <button class="tab" data-tab="gallery">사진함</button>
       <button class="tab" data-tab="tools">도구</button>
@@ -306,6 +317,14 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
         <h3>③ 시작</h3>
         <p>전체 화면으로 학생 화면을 엽니다. 교사 모드로 돌아오려면 제목(🎃 할로윈 방탈출)을 빠르게 5번 누르세요.</p>
         <button class="btn" id="btnStartStudent">학생 화면 시작 (전체 화면)</button>
+      </div>
+    </div>
+
+    <div data-pane="level" hidden>
+      <div class="panel">
+        <h3>무서움 강도 설정</h3>
+        <p>출발할 때 학생들이 고른 답(너무 무서워요 / 조금 / 하나도 안 무서워요)에 따라 귀신과 소리를 다르게 합니다. 저장하면 구글 시트에 기록되고 모든 태블릿이 1분 안에 따릅니다.</p>
+        <div id="intensityPanel"></div>
       </div>
     </div>
 
@@ -364,6 +383,8 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
 <script src="js/ghost-engine.js" defer></script>
+<script src="js/sfx.js" defer></script>
+<script src="js/intensity.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
 </html>
