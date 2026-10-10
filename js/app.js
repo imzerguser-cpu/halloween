@@ -1,17 +1,16 @@
 /* 할로윈 귀신 방탈출 — 앱 흐름, 저장, 구글 시트·드라이브 연동
- * 개인정보 원칙: 학생 이름은 메모리(roster)에만 둔다. localStorage·IndexedDB·파일명에는 조 번호만.
+ * 개인정보 원칙: 학생 이름은 다루지 않는다. 조 번호·인원·1·2학년 여부만 쓴다.
  */
 (function () {
   'use strict';
 
   // ---------- 상태 ----------
   const LS_CONF = 'hg_conf';    // { apiUrl, apiKey, stationId }
-  const LS_CACHE = 'hg_cache';  // { stations, settings, groupNums, excluded, fetchedAt }  ※ 이름 없음
+  const LS_CACHE = 'hg_cache';  // { stations, settings, fetchedAt }  ※ 이름 없음
   const DEFAULT_PIN = '1031';
 
   let conf = readLS(LS_CONF) || {};
-  let cache = readLS(LS_CACHE) || { stations: [], settings: {}, groupNums: [], excluded: [] };
-  let roster = null;            // { [group]: [{name, grade}] } — 메모리 전용
+  let cache = readLS(LS_CACHE) || { stations: [], settings: {} };
   let asset = null;             // 이 장소의 귀신 소재
   let assetState = '확인 전';
   let assetChecked = false;     // loadAsset 이 한 번 끝났는지
@@ -28,7 +27,7 @@
   function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
   // ---------- 화면 전환 ----------
-  const SCREENS = ['scrSetup', 'scrHome', 'scrConfirm', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
+  const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
   function show(id) {
     SCREENS.forEach((s) => { $(s).hidden = s !== id; });
     window.scrollTo(0, 0);
@@ -74,6 +73,68 @@
     };
   })();
 
+  // ---------- 조(팀): 출발 장소에서 번호를 붙이고, 다른 장소는 출발 순서를 따른다 ----------
+  // 이름은 다루지 않는다. 조마다 {size 인원, young 1·2학년 있음, time 출발 시각} 만 둔다.
+  const LS_TEAMS = 'hg_teams', LS_COUNTER = 'hg_counter', LS_CHECKINS = 'hg_checkins';
+  let teams = readLS(LS_TEAMS) || {};           // { [조]: {size, young, time} }
+  const saveTeams = () => writeLS(LS_TEAMS, teams);
+  const startStationId = () => setting('출발장소', '') || (cache.stations[0] && cache.stations[0].id) || '';
+  const isStartStation = () => !!station() && station().id === startStationId();
+  const visitedKey = () => 'hg_visited_' + (conf.stationId || '');
+  const teamTag = (g) => g + '@' + ((teams[g] && teams[g].time) || '');      // 같은 번호라도 다시 출발하면 다른 조로 본다
+  const visited = () => new Set(readLS(visitedKey()) || []);
+  function markVisited(g) { const v = visited(); v.add(teamTag(g)); writeLS(visitedKey(), [...v]); }
+
+  /** 다음에 올 조: 출발 순서에서 이 장소에 아직 안 온 가장 앞 번호 */
+  function nextTeam() {
+    const v = visited();
+    return Object.keys(teams).map(Number).sort((a, b) => a - b).find((g) => !v.has(teamTag(g))) || null;
+  }
+  function mergeOrder(list) {
+    // 시트가 기준. 단, 출발 장소 태블릿이 아직 못 올린 조는 지우지 않는다
+    const pending = new Set((readLS(LS_CHECKINS) || []).map((c) => c.group));
+    const next = {};
+    list.forEach((t) => { next[t.group] = { size: t.size, young: !!t.young, time: t.time }; });
+    Object.keys(teams).forEach((g) => { if (pending.has(Number(g)) && !next[g]) next[g] = teams[g]; });
+    teams = next; saveTeams();
+  }
+  async function loadOrder() {
+    if (!conf.apiUrl || !conf.apiKey || !navigator.onLine) return false;
+    try {
+      const r = await fetch(conf.apiUrl + (conf.apiUrl.includes('?') ? '&' : '?') + 'action=order&key=' + encodeURIComponent(conf.apiKey), { cache: 'no-store' });
+      const j = await r.json();
+      if (!j.ok) return false;
+      mergeOrder(j.groups);
+      return true;
+    } catch (e) { return false; }
+  }
+  // 출발 등록은 인터넷이 끊겨도 잃지 않도록 쌓아 두었다가 보낸다
+  async function flushCheckins() {
+    let q = readLS(LS_CHECKINS) || [];
+    if (!q.length || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return;
+    for (const c of q.slice()) {
+      try {
+        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ key: conf.apiKey, action: 'checkin', group: c.group, size: c.size, young: c.young }) });
+        const j = await r.json();
+        if (!j.ok) break;
+        q = q.filter((x) => x.group !== c.group); writeLS(LS_CHECKINS, q);
+      } catch (e) { break; }
+    }
+  }
+  function newTeam(size, young) {
+    const max = Math.max(0, readLS(LS_COUNTER) || 0, ...Object.keys(teams).map(Number));
+    const g = max + 1;
+    writeLS(LS_COUNTER, g);
+    teams[g] = { size, young, time: new Date().toISOString() }; saveTeams();
+    const q = (readLS(LS_CHECKINS) || []).filter((c) => c.group !== g);
+    q.push({ group: g, size, young }); writeLS(LS_CHECKINS, q);
+    flushCheckins();
+    return g;
+  }
+  setInterval(flushCheckins, 20000);
+  window.addEventListener('online', flushCheckins);
+
   // ---------- 귀신 배정 ----------
   function fnv1a(str) {
     let h = 0x811c9dc5;
@@ -83,19 +144,14 @@
   function ghostStations() {
     return cache.stations.filter((s) => s.ghost).map((s) => s.id).sort();
   }
-  /** 이 조의 귀신 장소 id (없으면 null) */
+  /** 이 조의 귀신 장소 id (없으면 null). 정보가 없는 조(출발 기록을 못 받음)는 안전하게 귀신 없음 */
   function ghostStationFor(group) {
-    if (cache.excluded.includes(group)) return null;
+    const t = teams[group];
+    if (!t || t.young) return null;
+    if (setting('귀신제외조', '').split(/[,\s]+/).map(Number).includes(group)) return null;
     const list = ghostStations();
     if (!list.length) return null;
     return list[fnv1a(setting('귀신시드', '0') + ':' + group) % list.length];
-  }
-  function computeExcluded(groups) {
-    const grades = setting('제외학년', '1,2').split(/[,\s]+/).map(Number).filter(Boolean);
-    const manual = setting('귀신제외조', '').split(/[,\s]+/).map(Number).filter(Boolean);
-    const ex = new Set(manual);
-    groups.forEach((g) => { if (g.members.some((m) => grades.includes(m.grade))) ex.add(g.group); });
-    return [...ex].sort((a, b) => a - b);
   }
 
   // ---------- 구글 시트 ----------
@@ -106,24 +162,16 @@
       const r = await fetch(url, { cache: 'no-store' });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error === 'key' ? '비밀 키가 맞지 않아요' : '시트 응답 오류');
-      roster = {};
-      j.groups.forEach((g) => { roster[g.group] = g.members; });
-      cache = {
-        stations: j.stations,
-        settings: j.settings,
-        groupNums: j.groups.map((g) => g.group),
-        excluded: computeExcluded(j.groups),
-        fetchedAt: j.fetchedAt
-      };
+      cache = { stations: j.stations, settings: j.settings, fetchedAt: j.fetchedAt };
       writeLS(LS_CACHE, cache);
-      if (!silent) setStatus('connStatus', `불러옴: ${j.groups.length}개 조, 장소 ${j.stations.length}곳 (${new Date().toLocaleTimeString()})`, 'ok');
+      mergeOrder(j.groups || []);
+      if (!silent) setStatus('connStatus', `불러옴: 장소 ${j.stations.length}곳, 출발한 조 ${Object.keys(teams).length}개 (${new Date().toLocaleTimeString()})`, 'ok');
       return true;
     } catch (e) {
-      setStatus('connStatus', '불러오기 실패: ' + e.message + (cache.fetchedAt ? ' — 저장된 설정으로 진행합니다(이름 표시 없음)' : ''), 'err');
+      setStatus('connStatus', '불러오기 실패: ' + e.message + (cache.fetchedAt ? ' — 저장된 설정으로 진행합니다' : ''), 'err');
       return false;
     }
   }
-  function setStatus(id, msg, cls) { const el = $(id); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : ''); }
 
   // ---------- 드라이브 업로드 ----------
   function blobToB64(blob) {
@@ -204,30 +252,83 @@
     const st = $('assetStatus'); if (st) st.textContent = '귀신 소재: ' + assetState;
   }
 
-  // ---------- 학생 화면 ----------
+  // ---------- 학생 화면: 시작 ----------
+  let orderTimer = null;
   async function renderHome() {
     const s = station();
     $('homeTitle').textContent = '📍 ' + s.name;
     $('homeStation').textContent = s.name;
-    const doneGroups = new Set((await db.all().catch(() => [])).filter((r) => r.stationId === s.id).map((r) => r.group));
+    $('homeGrid').hidden = true;
+    clearInterval(orderTimer);
+    if (isStartStation()) {
+      $('homeStart').hidden = false; $('homeNext').hidden = true;
+      $('homeLead').textContent = '모두 모였으면 시작해요!';
+      return;
+    }
+    $('homeStart').hidden = true; $('homeNext').hidden = false;
+    const draw = () => {
+      if ($('scrHome').hidden) return;
+      const g = nextTeam();
+      if (g) {
+        $('nextTeam').textContent = g + '조';
+        $('nextSize').textContent = teams[g] && teams[g].size ? `${teams[g].size}명` : '';
+        $('btnNextGo').hidden = false;
+        $('homeLead').textContent = '우리 조가 맞으면 시작해요!';
+      } else {
+        $('nextTeam').textContent = '…';
+        $('nextSize').textContent = '';
+        $('btnNextGo').hidden = true;
+        $('homeLead').textContent = '다음 조를 기다리고 있어요';
+      }
+    };
+    draw();
+    loadOrder().then(draw);
+    orderTimer = setInterval(() => { if ($('scrHome').hidden) return clearInterval(orderTimer); loadOrder().then(draw); }, 5000);
+  }
+  // "다른 조예요": 알고 있는 조 번호(없으면 1~12)에서 고르기
+  function showTeamGrid() {
     const grid = $('groupGrid'); grid.innerHTML = '';
-    const nums = cache.groupNums.length ? cache.groupNums : Array.from({ length: 10 }, (_, i) => i + 1);
+    const v = visited();
+    const known = Object.keys(teams).map(Number).sort((a, b) => a - b);
+    const nums = known.length ? known : Array.from({ length: 12 }, (_, i) => i + 1);
     nums.forEach((g) => {
       const b = document.createElement('button');
-      b.className = 'gbtn' + (doneGroups.has(g) ? ' done' : '');
+      b.className = 'gbtn' + (v.has(teamTag(g)) ? ' done' : '');
       b.innerHTML = `${g}<small>조</small>`;
-      b.onclick = () => pickGroup(g);
+      b.onclick = () => startTeam(g);
       grid.appendChild(b);
     });
+    $('homeGrid').hidden = false;
   }
-  function pickGroup(g) {
+  function startTeam(g) {
+    clearInterval(orderTimer);
     cur.group = g;
-    $('confGroup').textContent = g + '조';
-    const m = roster && roster[g];
-    $('confNames').textContent = m ? m.map((x) => x.name).join(' · ') : '';
-    $('confStation').textContent = station().name;
-    show('scrConfirm');
+    markVisited(g);
+    openMission();
   }
+
+  // 출발 장소: 인원 → (1·2학년?) → 조 번호 안내 → 미션
+  let teamDraft = {};
+  function openTeamSetup() {
+    teamDraft = {};
+    $('teamAskSize').hidden = false; $('teamAskYoung').hidden = true; $('teamDone').hidden = true;
+    show('scrTeam');
+  }
+  function pickSize(n) {
+    teamDraft.size = n;
+    if (setting('저학년질문', '예') === '아니오') return finishTeam(false);
+    $('teamAskSize').hidden = true; $('teamAskYoung').hidden = false;
+  }
+  async function finishTeam(young) {
+    const g = newTeam(teamDraft.size, young);
+    cur.group = g; markVisited(g);
+    $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamDone').hidden = false;
+    $('teamNum').textContent = g + '조';
+    $('teamSizeText').textContent = `${teamDraft.size}명`;
+    await sleep(2200);
+    if (!$('scrTeam').hidden) openMission();
+  }
+
   // 장소 유형: 사진(기본) · 스태킹(영상+제한시간) · 탁구공(영상+개수 입력) · 책찾기(바코드→사진) · 연속사진(10초 뒤 여러 장)
   const TYPE = {
     '사진': { btn: '📸 사진 찍으러 가기', lead: '미션을 성공한 순간을 사진으로 남겨요!' },
@@ -685,7 +786,7 @@
     $('inApiUrl').value = conf.apiUrl || '';
     $('inApiKey').value = conf.apiKey || '';
     if (cache.fetchedAt && !$('connStatus').classList.contains('ok')) {
-      setStatus('connStatus', `저장된 설정: ${cache.groupNums.length}개 조, 장소 ${cache.stations.length}곳 (${new Date(cache.fetchedAt).toLocaleString()})` + (roster ? '' : ' · 이름은 불러오기 후 표시'));
+      setStatus('connStatus', `저장된 설정: 장소 ${cache.stations.length}곳, 출발한 조 ${Object.keys(teams).length}개 (${new Date(cache.fetchedAt).toLocaleString()})`);
     }
     fillStations();
     $('assetStatus').textContent = '귀신 소재: ' + assetState;
@@ -709,13 +810,13 @@
   function renderGhostTable() {
     const nameOf = (id) => (cache.stations.find((s) => s.id === id) || {}).name || id;
     const list = ghostStations();
-    if (!cache.groupNums.length) { $('ghostTable').innerHTML = '<p>먼저 명단을 불러오세요.</p>'; return; }
+    const nums = Object.keys(teams).map(Number).sort((a, b) => a - b);
     let h = `<p>귀신 장소 후보: ${list.length ? list.map(nameOf).join(', ') : '없음 (시트 장소 탭의 귀신=예)'}</p>`;
-    h += '<table class="t"><tr><th>조</th><th>귀신 장소</th><th>비고</th></tr>';
-    cache.groupNums.forEach((g) => {
-      const st = ghostStationFor(g);
-      const ex = cache.excluded.includes(g);
-      h += `<tr><td>${g}조</td><td>${st ? '👻 ' + nameOf(st) : '—'}</td><td>${ex ? '제외 (저학년 또는 귀신제외조)' : ''}</td></tr>`;
+    if (!nums.length) { $('ghostTable').innerHTML = h + '<p>아직 출발한 조가 없어요. 출발 장소에서 조가 시작하면 여기에 나타나요.</p>'; return; }
+    h += '<table class="t"><tr><th>조</th><th>인원</th><th>귀신 장소</th><th>비고</th></tr>';
+    nums.forEach((g) => {
+      const st = ghostStationFor(g), t = teams[g];
+      h += `<tr><td>${g}조</td><td>${t.size ? t.size + '명' : ''}</td><td>${st ? '👻 ' + nameOf(st) : '—'}</td><td>${t.young ? '1·2학년 있음 → 제외' : st === null && list.length ? '귀신제외조' : ''}</td></tr>`;
     });
     $('ghostTable').innerHTML = h + '</table>';
   }
@@ -792,6 +893,17 @@
     setStatus('galStatus', `내보냄: ${recs.length}장 (원본/ 수정본/ 폴더로 구분)`, 'ok');
   }
 
+  // 리허설 뒤 실제 행사 전에: 이 태블릿의 조 번호·출발 기록·방문 기록을 지운다 (사진은 그대로)
+  let resetArmed = 0;
+  function resetTeams() {
+    if (Date.now() - resetArmed > 4000) { resetArmed = Date.now(); return toast('조 번호를 1번부터 다시 시작할까요? 4초 안에 한 번 더 누르세요.', 4000); }
+    resetArmed = 0;
+    teams = {}; saveTeams();
+    writeLS(LS_COUNTER, 0); writeLS(LS_CHECKINS, []);
+    Object.keys(localStorage).filter((k) => k.startsWith('hg_visited_')).forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+    toast('조 번호를 초기화했어요. 시트의 "출발"·"기록" 탭 내용도 지워 주세요.', 5000);
+  }
+
   let wipeArmed = 0;
   async function wipe() {
     if (Date.now() - wipeArmed > 4000) {
@@ -810,7 +922,7 @@
       `장소: ${station() ? esc(station().name) : '미설정'}`,
       `귀신 소재: ${esc(assetState)}`,
       `합성 엔진: ${es ? (es.ready ? '준비됨' : '준비 안 됨') + (es.segmentation ? ' · 인물 분할 사용' : ' · 인물 분할 없음') + (es.error ? ' · ' + esc(es.error) : '') : '없음'}`,
-      `명단: ${roster ? '불러옴(메모리)' : '없음 — 이름 표시 안 됨'}`,
+      `출발 장소: ${esc((cache.stations.find((x) => x.id === startStationId()) || {}).name || '미정')}${isStartStation() ? ' (이 태블릿)' : ''} · 알고 있는 조 ${Object.keys(teams).length}개 · 출발 등록 대기 ${(readLS(LS_CHECKINS) || []).length}개`,
       `인터넷: ${navigator.onLine ? '연결됨' : '끊김'}`,
       `저장 공간: <span id="diagQuota">확인 중</span>`
     ].join('<br>');
@@ -837,7 +949,13 @@
   function bind() {
     document.querySelectorAll('[data-go="home"]').forEach((b) => { b.onclick = goHome; });
     $('btnSetupAdmin').onclick = openPin;
-    $('btnConfirmYes').onclick = openMission;
+    $('btnTeamStart').onclick = openTeamSetup;
+    $('btnNextGo').onclick = () => { const g = nextTeam(); if (g) startTeam(g); };
+    $('btnOtherTeam').onclick = showTeamGrid;
+    document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });
+    $('btnYoungYes').onclick = () => finishTeam(true);
+    $('btnYoungNo').onclick = () => finishTeam(false);
+    $('btnResetTeams').onclick = resetTeams;
     $('btnOpenCam').onclick = startStudentCamera;
     $('btnShutter').onclick = shoot;
     $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };

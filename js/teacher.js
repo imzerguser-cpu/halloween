@@ -1,7 +1,7 @@
 /* 진행판 (교사 노트북)
  * - 시트 "기록" 탭을 주기적으로 읽어 조별 진행을 보여준다
  * - 수정이 필요한 영상(편집=대기)을 받아 1초 수정본을 만들고 드라이브에 올린다
- * 학생 이름은 화면 표시용으로만 메모리에 두고 저장하지 않는다.
+ * 학생 이름은 다루지 않는다. 조 번호·인원·1·2학년 여부만 쓴다.
  */
 (function () {
   'use strict';
@@ -9,7 +9,7 @@
   const LS = 'hg_teacher';
   let conf = {};
   try { conf = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
-  let roster = null;            // { groups:[{group, members}], stations, settings }
+  let roster = null;            // { groups:[{group, size, young, time}], stations, settings }
   let rows = [];                // 기록 탭 줄 (row 번호 = 배열 위치)
   let cursor = 0;
   const editing = { now: null, done: 0, failed: 0, retryAt: {} };
@@ -39,9 +39,8 @@
   }
   function excludedGroups() {
     const st = roster.settings || {};
-    const grades = String(st['제외학년'] || '1,2').split(/[,\s]+/).map(Number).filter(Boolean);
     const ex = new Set(String(st['귀신제외조'] || '').split(/[,\s]+/).map(Number).filter(Boolean));
-    roster.groups.forEach((g) => { if (g.members.some((m) => grades.includes(m.grade))) ex.add(g.group); });
+    roster.groups.forEach((g) => { if (g.young) ex.add(g.group); });
     return ex;
   }
   function ghostStationFor(group, ex) {
@@ -54,8 +53,9 @@
   // ---------- 불러오기 ----------
   async function loadRoster() {
     roster = await get({ action: 'roster' });
-    const sel = $('manStation'); sel.innerHTML = '';
-    roster.stations.filter((s) => s.ghost).forEach((s) => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
+    const sel = $('manStation'), keep = sel.value;
+    const opts = roster.stations.filter((s) => s.ghost).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; if (keep) sel.value = keep; }
   }
   async function loadLog(full) {
     const j = await get({ action: 'log', since: full ? 0 : cursor });
@@ -68,7 +68,7 @@
     if (!conf.apiUrl || !conf.apiKey) return;
     try {
       const full = Date.now() - lastFull > 120000;
-      if (!roster || full) await loadRoster();
+      await loadRoster();
       await loadLog(full);
       if (full) lastFull = Date.now();
       chip('chipConn', '연결됨', 'ok');
@@ -89,10 +89,12 @@
     const ex = excludedGroups();
     const list = rows.filter(Boolean);
     const st = roster.stations;
-    let h = '<tr><th>조</th><th>조원</th>' + st.map((s) => `<th>${esc(s.name)}</th>`).join('') + '</tr>';
+    let h = '<tr><th>조</th><th>인원·출발</th>' + st.map((s) => `<th>${esc(s.name)}</th>`).join('') + '</tr>';
     roster.groups.forEach((g) => {
       const ghostAt = ghostStationFor(g.group, ex);
-      h += `<tr><td><b>${g.group}조</b>${ex.has(g.group) ? '<br><span class="tag x">제외</span>' : ''}</td><td class="names">${esc(g.members.map((m) => m.name).join(', '))}</td>`;
+      const t = g.time ? new Date(g.time) : null;
+      const when = t && !isNaN(t) ? `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')} 출발` : '';
+      h += `<tr><td><b>${g.group}조</b>${ex.has(g.group) ? `<br><span class="tag x">${g.young ? '1·2학년' : '제외'}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
       st.forEach((s) => {
         const mine = list.filter((r) => Number(r['조']) === g.group && r['장소id'] === s.id);
         const orig = mine.filter((r) => r['구분'] === '원본');
@@ -239,12 +241,12 @@
     status('connStatus', '연결 중...');
     lastFull = 0; cursor = 0; rows = [];
     await refresh();
-    if ($('chipConn').classList.contains('ok')) status('connStatus', `연결됨 · ${roster.groups.length}개 조 · 장소 ${roster.stations.length}곳`, 'ok');
+    if ($('chipConn').classList.contains('ok')) status('connStatus', `연결됨 · 장소 ${roster.stations.length}곳 · 출발한 조 ${roster.groups.length}개`, 'ok');
     else status('connStatus', '연결 실패 — 주소와 비밀 키를 확인하세요', 'err');
     keepAwake();
   };
   $('btnManual').onclick = manualEdit;
   $('autoEdit').onchange = pumpEdits;
   setInterval(refresh, 10000);
-  if (conf.apiUrl && conf.apiKey) { refresh().then(() => { if (roster) status('connStatus', `연결됨 · ${roster.groups.length}개 조 · 장소 ${roster.stations.length}곳`, 'ok'); }); keepAwake(); }
+  if (conf.apiUrl && conf.apiKey) { refresh().then(() => { if (roster) status('connStatus', `연결됨 · 장소 ${roster.stations.length}곳 · 출발한 조 ${roster.groups.length}개`, 'ok'); }); keepAwake(); }
 })();

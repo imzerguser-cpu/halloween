@@ -90,6 +90,10 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 #resVideo{display:block;max-width:100%;max-height:58vh}
 .save-track{width:min(70vw,420px);height:12px;margin:18px auto 0;border-radius:8px;background:rgba(255,255,255,.12);overflow:hidden}
 .save-bar{height:100%;width:0;background:linear-gradient(90deg,#ffd98f,#e9a94a);transition:width .15s}
+.big-go{font-size:30px;padding:22px 44px;border-radius:18px}
+.next-card{text-align:center;max-width:520px;margin:0 auto}
+.next-team{font-family:'Nanum Myeongjo',serif;font-size:96px;font-weight:800;color:var(--gold-lt);line-height:1.1;text-shadow:0 4px 18px rgba(0,0,0,.7)}
+.size-btn{font-size:30px;min-width:150px;padding:22px 26px}
 .spinner{width:56px;height:56px;border:6px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:30px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* admin */
@@ -138,32 +142,60 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   </div>
 </section>
 
-<!-- 조 선택 -->
+<!-- 시작 (출발 장소: 우리 조 시작하기 / 다른 장소: 다음 순서) -->
 <section class="screen" id="scrHome" hidden>
   <header class="hd">
     <div><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="homeStation"></div></div>
     <div class="hd-sub">👻 유령 학교의 미션</div>
   </header>
-  <div class="wrap">
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
     <h1 class="big-title" id="homeTitle">미션 장소</h1>
-    <p class="lead">우리 조 번호를 눌러 주세요</p>
-    <div class="groups" id="groupGrid"></div>
+    <p class="lead" id="homeLead"></p>
+    <div id="homeStart" class="row center" hidden>
+      <button class="btn big-go" id="btnTeamStart">🎃 우리 조 시작하기</button>
+    </div>
+    <div id="homeNext" hidden>
+      <div class="card next-card">
+        <div class="hd-sub">다음 순서</div>
+        <div class="next-team" id="nextTeam">…</div>
+        <div class="names" id="nextSize" style="margin:0"></div>
+        <button class="btn big-go" id="btnNextGo" style="margin-top:16px">▶ 시작하기</button>
+      </div>
+      <div class="row center" style="margin-top:14px"><button class="btn ghost sm" id="btnOtherTeam">우리 조가 아니에요</button></div>
+    </div>
+    <div id="homeGrid" hidden style="margin-top:18px">
+      <p class="lead" style="margin-bottom:12px">우리 조 번호를 눌러 주세요</p>
+      <div class="groups" id="groupGrid"></div>
+    </div>
   </div>
 </section>
 
-<!-- 조 확인 -->
-<section class="screen" id="scrConfirm" hidden>
-  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="confStation"></div></header>
+<!-- 출발: 인원·저학년 -->
+<section class="screen" id="scrTeam" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
-    <div class="card" style="text-align:center">
-      <h2 class="big-title" id="confGroup">1조</h2>
-      <div class="names" id="confNames"></div>
-      <p class="lead">우리 조가 맞나요?</p>
-      <div class="row center">
-        <button class="btn ghost" data-go="home">아니에요</button>
-        <button class="btn" id="btnConfirmYes">맞아요! 미션 보기</button>
+    <div class="card" style="text-align:center" id="teamAskSize">
+      <h2 class="big-title" style="font-size:30px">우리 조는 몇 명이에요?</h2>
+      <div class="row center" style="margin-top:18px">
+        <button class="btn size-btn" data-size="2">2명</button>
+        <button class="btn size-btn" data-size="3">3명</button>
+        <button class="btn size-btn" data-size="4">4명</button>
       </div>
     </div>
+    <div class="card" style="text-align:center" id="teamAskYoung" hidden>
+      <h2 class="big-title" style="font-size:30px">1·2학년 동생이 함께 있나요?</h2>
+      <div class="row center" style="margin-top:18px">
+        <button class="btn size-btn" id="btnYoungYes">네, 있어요</button>
+        <button class="btn size-btn" id="btnYoungNo">아니요</button>
+      </div>
+    </div>
+    <div class="card" style="text-align:center" id="teamDone" hidden>
+      <div class="hd-sub" style="font-size:18px">우리는</div>
+      <div class="next-team" id="teamNum">1조</div>
+      <div class="names" id="teamSizeText" style="margin:0"></div>
+      <p class="lead" style="margin:14px 0 0">조 번호를 기억해요! 미션으로 출발!</p>
+    </div>
+    <div class="row center" style="margin-top:16px"><button class="btn ghost sm" data-go="home">처음으로</button></div>
   </div>
 </section>
 
@@ -310,6 +342,11 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
         <h3>귀신 합성 시험</h3>
         <p>이 장소의 귀신을 무조건 넣어서 한 장 찍어 봅니다. 사진함에 저장되지 않습니다.</p>
         <button class="btn sm" id="btnTestShot">👻 시험 촬영</button>
+      </div>
+      <div class="panel">
+        <h3>조 번호 초기화 (리허설 뒤)</h3>
+        <p>리허설이 끝나고 실제 행사 전에, 이 태블릿의 조 번호·방문 기록을 지워 1조부터 다시 시작합니다. 사진함은 그대로입니다. <b>모든 태블릿에서 누르고</b>, 구글 시트의 "출발"·"기록" 탭 내용(첫 줄 제목 빼고)도 지워 주세요.</p>
+        <button class="btn sm danger" id="btnResetTeams">🔄 조 번호 초기화</button>
       </div>
       <div class="panel">
         <h3>상태</h3>
