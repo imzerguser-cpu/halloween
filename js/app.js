@@ -411,7 +411,8 @@
     return vs.find((v) => v.name === conf.voice) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
   }
   // 외부 AI 목소리: 시트 스크립트가 만들어 준 mp3 를 태블릿에도 저장(IndexedDB)해 두고 재생. 실패하면 태블릿 음성
-  const ttsProvider = () => { const v = setting('나레이션방식', '태블릿'); return v === 'ElevenLabs' || v === '클로바' ? v : ''; };
+  const TTS_VOICE_KEY = { 'Google': '구글목소리_', 'Azure': '애저목소리_', '클로바': '클로바목소리_', 'ElevenLabs': '나레이션목소리_' };
+  const ttsProvider = () => { const v = setting('나레이션방식', '태블릿'); return TTS_VOICE_KEY[v] ? v : ''; };
   const ttsDb = (() => {
     let p;
     const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open('hg-tts', 1); r.onupgradeneeded = () => r.result.createObjectStore('clips'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
@@ -420,8 +421,12 @@
       put: async (k, v) => { const d = await open(); return new Promise((res) => { const t = d.transaction('clips', 'readwrite'); t.objectStore('clips').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); }
     };
   })();
-  const ttsKey = (prov, lv, text) => [prov, lv, setting(prov === '클로바' ? '클로바목소리_' + FEAR_KEY[lv] : '나레이션목소리_' + FEAR_KEY[lv], ''),
-    setting('나레이션목소리', ''), setting('클로바속도_' + FEAR_KEY[lv], ''), setting('클로바높이_' + FEAR_KEY[lv], ''), text].join('|');
+  // 목소리·속도·높이 설정이 바뀌면 새로 만들도록 저장 키에 넣는다
+  const ttsKey = (prov, lv, text) => {
+    const pre = { 'Google': '구글', 'Azure': '애저', '클로바': '클로바' }[prov] || '';
+    return [prov, lv, setting(TTS_VOICE_KEY[prov] + FEAR_KEY[lv], ''), setting('나레이션목소리', ''),
+      pre ? setting(pre + '속도_' + FEAR_KEY[lv], '') : '', pre ? setting(pre + '높이_' + FEAR_KEY[lv], '') : '', text].join('|');
+  };
   async function ttsClip(text, lv) {
     const prov = ttsProvider(); if (!prov) return null;
     const k = ttsKey(prov, lv, text);
@@ -994,7 +999,7 @@
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
-    if (name === 'tools') { renderDiag(); renderCamSettings(); renderVoices(); }
+    if (name === 'tools') { renderDiag(); renderCamSettings(); renderVoices(); $('btnVoicePrefetch').hidden = !ttsProvider(); }
     if (name === 'level') renderIntensity();
     if (name === 'story') renderStoryEditor();
   }

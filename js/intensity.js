@@ -66,7 +66,10 @@
     <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
   </div>
   <div class="int-row"><span>이야기 읽어 주기</span>
-    <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기 (태블릿 음성 · 목소리는 교사 모드 도구 탭에서 선택)</label>
+    <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>
+  </div>
+  <div class="int-row"><span>나레이션 목소리</span>
+    ${[['태블릿', '태블릿 음성 (Web Speech · 무료·바로 됨)'], ['Google', 'Google Cloud TTS (자연스러움)'], ['Azure', 'MS Azure Neural TTS (자연스러움)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-voice" value="${v}"${get(st, '나레이션방식') === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
 
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
