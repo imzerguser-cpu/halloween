@@ -30,12 +30,13 @@
   function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
   // ---------- 화면 전환 ----------
-  const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
+  const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrStory', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
   function show(id) {
     SCREENS.forEach((s) => { $(s).hidden = s !== id; });
     window.scrollTo(0, 0);
   }
   function goHome() {
+    stopNarration();
     setTimeout(runEdits, 1500);
     releaseHolds();
     cur = { group: null, lastId: null };
@@ -341,12 +342,12 @@
     });
     $('homeGrid').hidden = false;
   }
-  function startTeam(g) {
-    if (pickMode() && !teams[g]) loadOrder();          // 출발 장소에서 등록한 정보(저학년·무서움)를 받아 둔다
+  async function startTeam(g) {
     clearInterval(orderTimer);
     cur.group = g;
     markVisited(g);
-    openMission();
+    if (!teams[g]) await loadOrder();                   // 출발 장소에서 등록한 정보(저학년·무서움)를 받아 둔다 (이야기 단계에 필요)
+    openStories([stationStory(station())]);
   }
 
   // 출발 장소: 인원 → (1·2학년?) → 조 번호 안내 → 미션
@@ -372,11 +373,63 @@
     $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamDone').hidden = false;
     $('teamNum').textContent = g + '조';
     $('teamSizeText').textContent = `${teamDraft.size}명`;
-    // 프롤로그: 무서움 단계별 이야기. 읽을 시간이 필요하므로 버튼으로 넘어간다
-    const story = prologueText(young ? 0 : fear);
-    $('teamStory').hidden = !story; $('teamStoryText').textContent = story;
-    $('btnTeamGo').hidden = !story;
-    if (!story) { await sleep(2200); if (!$('scrTeam').hidden) openMission(); }
+    $('teamStory').hidden = true; $('btnTeamGo').hidden = true;
+    // 조 번호를 잠깐 보여 준 뒤 이야기 화면(프롤로그 → 이 장소 괴담) → 미션
+    await sleep(2500);
+    if ($('scrTeam').hidden) return;
+    const pro = prologueText(young ? 0 : fear);
+    openStories([pro ? { title: '오늘 밤의 이야기', text: pro } : null, stationStory(station())]);
+  }
+
+  // ---------- 이야기 화면 (전체 화면 + 나레이션) ----------
+  let storyPages = [], storyIdx = 0;
+  function openStories(pages) {
+    storyPages = pages.filter(Boolean);
+    if (!storyPages.length) return openMission();
+    storyIdx = 0; showStoryPage();
+  }
+  function showStoryPage() {
+    const pg = storyPages[storyIdx];
+    $('storyGroup').textContent = cur.group + '조';
+    $('storyTitle').textContent = pg.title ? (pg.title === '오늘 밤의 이야기' ? '📜 ' + pg.title : '「' + pg.title + '」') : '';
+    $('storyText').textContent = pg.text;
+    $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : '미션 보기 ▶';
+    const box = $('storyText'); box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
+    show('scrStory');
+    narrate(pg.text);
+  }
+  function nextStory() {
+    stopNarration();
+    if (storyIdx < storyPages.length - 1) { storyIdx++; showStoryPage(); } else openMission();
+  }
+
+  // 나레이션: 태블릿의 한국어 음성(구글·삼성 TTS)으로 읽는다. 무서움 단계별 말투(속도·높이)
+  const narrationOn = () => setting('나레이션', '예') !== '아니오' && 'speechSynthesis' in window;
+  function koVoices() { return ('speechSynthesis' in window ? speechSynthesis.getVoices() : []).filter((v) => /^ko/i.test(v.lang)); }
+  function pickVoice() {
+    const vs = koVoices();
+    return vs.find((v) => v.name === conf.voice) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
+  }
+  function narrate(text, opts) {
+    if (!narrationOn() || !text) return;
+    stopNarration();
+    const u = new SpeechSynthesisUtterance(text.replace(/[「」📜😊]/g, ''));
+    u.lang = 'ko-KR';
+    const v = pickVoice(); if (v) u.voice = v;
+    const lv = opts && opts.level != null ? opts.level : storyLevel();
+    const base = parseFloat(setting('나레이션속도', '0.95')) || 0.95;
+    u.rate = Math.max(0.5, Math.min(1.5, base * [1.05, 0.95, 0.85][lv]));
+    u.pitch = [1.1, 0.95, 0.75][lv];
+    u.volume = 1;
+    speechSynthesis.speak(u);
+  }
+  function stopNarration() { try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {} }
+  if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { if (!$('scrAdmin').hidden) renderVoices(); };
+  function renderVoices() {
+    const sel = $('selVoice'); if (!sel) return;
+    const vs = koVoices(), cur0 = pickVoice();
+    sel.innerHTML = vs.length ? vs.map((v) => '<option value="' + esc(v.name) + '"' + (cur0 && v.name === cur0.name ? ' selected' : '') + '>' + esc(v.name) + (v.localService ? '' : ' (온라인)') + '</option>').join('')
+      : '<option value="">이 기기에 한국어 음성이 없어요</option>';
   }
 
   // ---------- 괴담 (무서움 단계별 문구) ----------
@@ -409,9 +462,8 @@
 
   function openMission() {
     const s = station(), t = stType();
-    const st = stationStory(s);
-    $('misStory').hidden = !st;
-    if (st) { $('misStoryTitle').textContent = st.title ? `「${st.title}」` : ''; $('misStoryText').textContent = st.text; }
+    stopNarration();
+    $('misStory').hidden = true;
     $('misStation').textContent = '🎯 ' + s.name + ' 미션';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     $('misGroup').textContent = cur.group + '조';
@@ -888,7 +940,7 @@
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
-    if (name === 'tools') { renderDiag(); renderCamSettings(); }
+    if (name === 'tools') { renderDiag(); renderCamSettings(); renderVoices(); }
     if (name === 'level') renderIntensity();
     if (name === 'story') renderStoryEditor();
   }
@@ -1075,6 +1127,10 @@
     $('btnSetupAdmin').onclick = openPin;
     $('btnTeamStart').onclick = () => openTeamSetup();
     $('btnTeamGo').onclick = () => openMission();
+    $('btnStoryNext').onclick = nextStory;
+    $('btnStoryReplay').onclick = () => narrate(storyPages[storyIdx] && storyPages[storyIdx].text);
+    $('selVoice').onchange = (e) => { conf.voice = e.target.value; writeLS(LS_CONF, conf); };
+    $('btnVoiceTest').onclick = () => { const lv = Number($('selVoiceLevel').value); narrate(prologueText(lv), { level: lv }); };
     $('btnNextGo').onclick = () => { const g = nextTeam(); if (g) startTeam(g); };
     $('btnOtherTeam').onclick = showTeamGrid;
     document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });

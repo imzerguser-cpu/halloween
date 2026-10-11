@@ -14,7 +14,7 @@
     '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
-    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교'
+    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예'
   };
   function get(st, k) {
     st = st || {};
@@ -64,6 +64,9 @@
   <div class="int-row"><span>출발할 때 묻기</span>
     <label class="int-chk"><input type="checkbox" data-k="저학년질문"${yes(get(st, '저학년질문')) ? ' checked' : ''}> 1·2학년 동생 있나요?</label>
     <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
+  </div>
+  <div class="int-row"><span>이야기 읽어 주기</span>
+    <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기 (태블릿 한국어 음성)</label>
   </div>
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
     <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">

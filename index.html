@@ -292,6 +292,15 @@ button{touch-action:manipulation}
 
 /* 녹화 중 끝 버튼: 공통 .btn 글씨 크기보다 우선 */
 #scrCamera .btn.stop-btn{font-size:clamp(40px,7vw,68px)!important;font-weight:400}
+/* 이야기 전체 화면 */
+#scrStory.screen{background:linear-gradient(180deg,#120b22c8,#120b22e6 60%,#0c0716f2),url('assets/castle-gate.webp') center/cover no-repeat !important}
+.story-stage{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:22px;padding:20px 7vw 36px;text-align:center}
+.story-big-title{font-size:clamp(30px,3.6vw,44px);color:#ffc56b;text-shadow:0 3px 12px #000}
+.story-big-text{font-size:clamp(28px,3.4vw,42px);line-height:1.7;color:#fff4e6;max-width:1100px;word-break:keep-all;text-shadow:0 3px 14px #000c}
+.story-big-text.in{animation:storyIn 1.2s ease both}
+@keyframes storyIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.story-btns{margin-top:10px;gap:16px}
+@media(max-width:540px){.story-big-text{font-size:24px}.story-big-title{font-size:26px}}
 /* 괴담 카드 */
 .story-card{max-width:860px;width:100%;margin:0 auto 14px;padding:18px 26px;border-radius:22px;background:#1b1230e6;border:1px solid #8b667d;box-shadow:0 8px 24px #0006;text-align:left}
 .story-title{font-size:22px;color:#ffc56b;margin-bottom:6px;text-align:center}
@@ -392,6 +401,19 @@ button{touch-action:manipulation}
     <div class="story-card" id="teamStory" hidden><div class="story-title">📜 오늘 밤의 이야기</div><div class="story-text" id="teamStoryText"></div></div>
     <div class="row center" style="margin-top:14px"><button class="btn big-go" id="btnTeamGo" hidden>미션으로 출발! ▶</button></div>
     <div class="row center" style="margin-top:16px"><button class="btn ghost sm" data-go="home">처음으로</button></div>
+  </div>
+</section>
+
+<!-- 이야기 (전체 화면 + 나레이션) -->
+<section class="screen" id="scrStory" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="storyGroup"></div></header>
+  <div class="story-stage">
+    <div class="story-big-title" id="storyTitle"></div>
+    <div class="story-big-text" id="storyText"></div>
+    <div class="row center story-btns">
+      <button class="btn ghost" id="btnStoryReplay">🔊 다시 듣기</button>
+      <button class="btn big-go" id="btnStoryNext">미션 보기 ▶</button>
+    </div>
   </div>
 </section>
 
@@ -567,6 +589,13 @@ button{touch-action:manipulation}
         <label class="row" style="gap:6px;margin-bottom:6px"><input type="radio" name="camFacing" value="user" style="width:auto"> 앞면 카메라 (화면 쪽, 학생이 자기 모습을 보며 찍음)</label>
         <label class="row" style="gap:6px;margin-bottom:10px"><input type="radio" name="camFacing" value="environment" style="width:auto"> 뒷면 카메라</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="chkScreenLight" style="width:auto"> 화면 조명 (앞면 카메라일 때 화면 둘레를 하얗게 밝혀 얼굴을 비춤 · 태블릿 밝기 최대 권장)</label>
+      </div>
+      <div class="panel">
+        <h3>나레이션 목소리 (이 태블릿)</h3>
+        <p>이야기를 읽어 줄 목소리를 고르세요. 태블릿에 깔린 한국어 음성(구글·삼성)만 보입니다. 더 자연스러운 목소리가 필요하면 태블릿 <b>설정 → 일반 → 텍스트 음성 변환</b>에서 음성 데이터를 받으세요.</p>
+        <label class="field"><span>목소리</span><select id="selVoice"></select></label>
+        <div class="row"><select id="selVoiceLevel" style="width:auto;padding:9px 10px;border-radius:9px;background:#0f1116;color:#fff;border:1px solid #3a3f50"><option value="0">😱 너무 무서워요 말투</option><option value="1" selected>😬 조금 무서워요 말투</option><option value="2">😎 하나도 안 무서워요 말투</option></select>
+        <button class="btn sm" id="btnVoiceTest">🔊 미리 듣기</button></div>
       </div>
       <div class="panel">
         <h3>조 번호 초기화 (리허설 뒤)</h3>
