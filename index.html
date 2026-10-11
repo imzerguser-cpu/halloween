@@ -290,6 +290,12 @@ button{touch-action:manipulation}
   *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 
+/* 괴담 카드 */
+.story-card{max-width:860px;width:100%;margin:0 auto 14px;padding:18px 26px;border-radius:22px;background:#1b1230e6;border:1px solid #8b667d;box-shadow:0 8px 24px #0006;text-align:left}
+.story-title{font-size:22px;color:#ffc56b;margin-bottom:6px;text-align:center}
+.story-text{font-size:21px;line-height:1.65;color:#efdeeb;white-space:pre-wrap;word-break:keep-all}
+#scrMission .big-title{margin-top:4px}
+@media(max-width:540px){.story-text{font-size:18px}.story-card{padding:14px 16px}}
 </style>
 </head>
 <body>
@@ -381,6 +387,8 @@ button{touch-action:manipulation}
       <div class="names" id="teamSizeText" style="margin:0"></div>
       <p class="lead" style="margin:14px 0 0">조 번호를 기억해요! 미션으로 출발!</p>
     </div>
+    <div class="story-card" id="teamStory" hidden><div class="story-title">📜 오늘 밤의 이야기</div><div class="story-text" id="teamStoryText"></div></div>
+    <div class="row center" style="margin-top:14px"><button class="btn big-go" id="btnTeamGo" hidden>미션으로 출발! ▶</button></div>
     <div class="row center" style="margin-top:16px"><button class="btn ghost sm" data-go="home">처음으로</button></div>
   </div>
 </section>
@@ -389,7 +397,8 @@ button{touch-action:manipulation}
 <section class="screen" id="scrMission" hidden>
   <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="misGroup"></div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
-    <h2 class="big-title" id="misStation">📜 미션</h2>
+    <div class="story-card" id="misStory" hidden><div class="story-title" id="misStoryTitle"></div><div class="story-text" id="misStoryText"></div></div>
+    <h2 class="big-title" id="misStation">🎯 미션</h2>
     <div class="parch" style="margin:14px 0 22px"><div class="mission-text" id="misText"></div></div>
     <p class="lead" id="misLead">미션을 성공한 순간을 사진으로 남겨요!</p>
     <div class="row center">
@@ -571,6 +580,7 @@ button{touch-action:manipulation}
 <script src="js/ghost-engine.js" defer></script>
 <script src="js/sfx.js" defer></script>
 <script src="js/intensity.js" defer></script>
+<script src="js/stories.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
 </html>

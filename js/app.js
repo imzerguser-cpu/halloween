@@ -372,8 +372,27 @@
     $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamDone').hidden = false;
     $('teamNum').textContent = g + '조';
     $('teamSizeText').textContent = `${teamDraft.size}명`;
-    await sleep(2200);
-    if (!$('scrTeam').hidden) openMission();
+    // 프롤로그: 무서움 단계별 이야기. 읽을 시간이 필요하므로 버튼으로 넘어간다
+    const story = prologueText(young ? 0 : fear);
+    $('teamStory').hidden = !story; $('teamStoryText').textContent = story;
+    $('btnTeamGo').hidden = !story;
+    if (!story) { await sleep(2200); if (!$('scrTeam').hidden) openMission(); }
+  }
+
+  // ---------- 괴담 (무서움 단계별 문구) ----------
+  const FEAR_KEY = ['너무', '조금', '안무서움'];
+  const storyLevel = () => { const f = teamFear(cur.group); return f == null ? 0 : f; };   // 1·2학년·모르는 조는 가장 순한 글
+  function prologueText(level) {
+    const lv = level == null ? 1 : level;
+    const custom = setting('프롤로그_' + FEAR_KEY[lv], '');
+    return custom || ((window.HG_STORIES && HG_STORIES.prologue[lv]) || '');
+  }
+  function stationStory(s) {
+    const lv = storyLevel(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
+    const title = (s.storyTitle || '').trim() || (def ? def.title : '');
+    const custom = s.stories && s.stories[lv];
+    const text = (custom || '').trim() || (def ? def.text[lv] : '');
+    return text ? { title, text } : null;
   }
 
   // 장소 유형: 사진(기본) · 스태킹(영상+제한시간) · 탁구공(영상+개수 입력) · 책찾기(바코드→사진) · 연속사진(10초 뒤 여러 장)
@@ -390,7 +409,10 @@
 
   function openMission() {
     const s = station(), t = stType();
-    $('misStation').textContent = '📜 ' + s.name + ' 미션';
+    const st = stationStory(s);
+    $('misStory').hidden = !st;
+    if (st) { $('misStoryTitle').textContent = st.title ? `「${st.title}」` : ''; $('misStoryText').textContent = st.text; }
+    $('misStation').textContent = '🎯 ' + s.name + ' 미션';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     $('misGroup').textContent = cur.group + '조';
     $('misLead').textContent = TYPE[t].lead;
@@ -760,6 +782,8 @@
       }
     }
     $('resTitle').textContent = title;
+    const idx = cache.stations.findIndex((x) => x.id === s.id);
+    if (success && idx >= 0 && cache.stations.length > 1) msg = `🔍 미션 ${idx + 1}/${cache.stations.length} 완료! ` + msg;
     $('resMsg').textContent = msg;
     setClue(success, !res.pingpong);
     show('scrResult');
@@ -1035,6 +1059,7 @@
     document.querySelectorAll('[data-go="home"]').forEach((b) => { b.onclick = goHome; });
     $('btnSetupAdmin').onclick = openPin;
     $('btnTeamStart').onclick = () => openTeamSetup();
+    $('btnTeamGo').onclick = () => openMission();
     $('btnNextGo').onclick = () => { const g = nextTeam(); if (g) startTeam(g); };
     $('btnOtherTeam').onclick = showTeamGrid;
     document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });
