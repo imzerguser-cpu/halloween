@@ -290,6 +290,8 @@ button{touch-action:manipulation}
   *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 
+/* 녹화 중 끝 버튼: 공통 .btn 글씨 크기보다 우선 */
+#scrCamera .btn.stop-btn{font-size:clamp(40px,7vw,68px)!important;font-weight:400}
 /* 괴담 카드 */
 .story-card{max-width:860px;width:100%;margin:0 auto 14px;padding:18px 26px;border-radius:22px;background:#1b1230e6;border:1px solid #8b667d;box-shadow:0 8px 24px #0006;text-align:left}
 .story-title{font-size:22px;color:#ffc56b;margin-bottom:6px;text-align:center}
@@ -482,6 +484,7 @@ button{touch-action:manipulation}
     <div class="tabs" id="adminTabs">
       <button class="tab on" data-tab="conn">연결·장소</button>
       <button class="tab" data-tab="level">강도 설정</button>
+      <button class="tab" data-tab="story">이야기</button>
       <button class="tab" data-tab="ghost">귀신 배정</button>
       <button class="tab" data-tab="gallery">사진함</button>
       <button class="tab" data-tab="tools">도구</button>
@@ -513,6 +516,14 @@ button{touch-action:manipulation}
         <h3>무서움 강도 설정</h3>
         <p>출발할 때 학생들이 고른 답(너무 무서워요 / 조금 / 하나도 안 무서워요)에 따라 귀신과 소리를 다르게 합니다. 저장하면 구글 시트에 기록되고 모든 태블릿이 1분 안에 따릅니다.</p>
         <div id="intensityPanel"></div>
+      </div>
+    </div>
+
+    <div data-pane="story" hidden>
+      <div class="panel">
+        <h3>이야기 고치기</h3>
+        <p>출발할 때 나오는 이야기와 장소별 괴담을 무서움 단계마다 고칠 수 있습니다. 저장하면 구글 시트에 기록되고 모든 태블릿이 1분 안에 따릅니다.</p>
+        <div id="storyPanel"></div>
       </div>
     </div>
 
@@ -581,6 +592,7 @@ button{touch-action:manipulation}
 <script src="js/sfx.js" defer></script>
 <script src="js/intensity.js" defer></script>
 <script src="js/stories.js" defer></script>
+<script src="js/story-editor.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
 </html>

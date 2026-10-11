@@ -890,6 +890,21 @@
     if (name === 'gallery') renderGallery();
     if (name === 'tools') { renderDiag(); renderCamSettings(); }
     if (name === 'level') renderIntensity();
+    if (name === 'story') renderStoryEditor();
+  }
+
+  function renderStoryEditor() {
+    if (!window.StoryEditor) return;
+    StoryEditor.render($('storyPanel'), cache.settings, cache.stations, {
+      onSave: async (payload) => {
+        if (!conf.apiUrl || !conf.apiKey) throw new Error('먼저 구글 시트를 연결하세요');
+        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ key: conf.apiKey, action: 'stories', ...payload }) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || '응답 오류');
+        await loadRoster(true);
+      }
+    });
   }
 
   function renderIntensity() {

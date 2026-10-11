@@ -67,9 +67,20 @@
       onSave: async (o) => { const j = await post({ action: 'settings', settings: o }); roster.settings = j.settings; intensityDrawn = JSON.stringify(j.settings) + roster.stations.length; render(); }
     });
   }
+  let storyDrawn = '';
+  function drawStories() {
+    const key = JSON.stringify([roster.settings, roster.stations]);
+    const el = $('storyPanel');
+    if (key === storyDrawn || el.contains(document.activeElement)) return;
+    storyDrawn = key;
+    StoryEditor.render(el, roster.settings, roster.stations, {
+      onSave: async (payload) => { await post({ action: 'stories', ...payload }); storyDrawn = ''; await loadRoster(); }
+    });
+  }
   async function loadRoster() {
     roster = await get({ action: 'roster' });
     drawIntensity();
+    drawStories();
     const sel = $('manStation'), keep = sel.value;
     const opts = roster.stations.filter((s) => s.ghost).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
     if (sel.dataset.opts !== opts) { sel.innerHTML = opts; sel.dataset.opts = opts; if (keep) sel.value = keep; }

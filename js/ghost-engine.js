@@ -504,7 +504,8 @@
   }
   function editPainter(analysis, w, h, at, duration) {
     const surface = canvas(w, h), ctx = surface.getContext('2d'); let layer, frames = 0, retired = false, misses = 0;
-    return { surface, get frames() { return frames; }, get endedEarly() { return retired; }, paint(image, time) {
+    const prepare = image => { if (!layer) layer = analysis.layer(image, w, h); };
+    return { surface, prepare, get frames() { return frames; }, get endedEarly() { return retired; }, paint(image, time) {
       ctx.drawImage(image, 0, 0, w, h);
       const age = time - at;
       if (!retired && age >= 0 && age < duration) {
@@ -512,7 +513,7 @@
         if (!analysis.clear(image)) { if (++misses >= 3) { retired = true; return; } } else misses = 0;
         const opacity = clamp(Math.min(age / .12, (duration - age) / .16), 0, 1);
         if (!opacity) return;
-        if (!layer) layer = analysis.layer(surface, w, h);
+        prepare(surface);
         ctx.save(); ctx.globalAlpha = opacity;
         ctx.drawImage(layer, 0, 0); ctx.restore(); frames++;
       }
@@ -600,6 +601,14 @@
         await seek(t); await analysis.inspect(video, t, Math.min(t + .1, length)); progress(.4 * t / length);
       }
       const at = analysis.choose(), painter = editPainter(analysis, w, h, at, options.duration);
+      // Build the full-resolution layer while paused. Doing this on the first
+      // visible frame advances the playback clock without capturing frames,
+      // consuming part of the one-second appearance (and delaying audio/video).
+      await seek(at);
+      const preparationStarted = performance.now();
+      const reference = draw(video, w, h);
+      painter.prepare(reference);
+      const layerPreparationMs = Math.round(performance.now() - preparationStarted);
       await seek(0); painter.paint(video, 0);
       const captured = (video.captureStream || video.mozCaptureStream).call(video); tracks.push(...captured.getTracks());
       // Muting the element prevents speaker playback; captureStream keeps its audio content.
@@ -623,9 +632,15 @@
       const interrupted = () => { if (document.hidden) { failure = Error('document-hidden'); stop(); } };
       document.addEventListener('visibilitychange', interrupted);
       video.onended = stop;
+      let maxPaintMs = 0;
       const tick = () => {
         if (recorder.state === 'inactive') return;
-        try { painter.paint(video, video.currentTime); progress(.4 + .55 * video.currentTime / length); }
+        try {
+          const paintStarted = performance.now();
+          painter.paint(video, video.currentTime);
+          maxPaintMs = Math.max(maxPaintMs, performance.now() - paintStarted);
+          progress(.4 + .55 * video.currentTime / length);
+        }
         catch (e) { failure = e; stop(); return; }
         if (video.requestVideoFrameCallback) frameId = video.requestVideoFrameCallback(tick);
         else timer = setTimeout(tick, 1000 / 30);
@@ -638,7 +653,7 @@
         const result = await done;
         if (!result.size || !painter.frames) throw Error('ghost-space-not-rendered');
         return { blob: result, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', applied: true, layer: analysis.file, ghostAtMs: Math.round(at * 1000),
-          stats: { width: w, height: h, durationMs: Math.round(length * 1000), compositeFrames: painter.frames, ghostEndedEarly: painter.endedEarly, audioTracks: audio.length, audio: 'capture-stream-reencoded', scanIntervalMs: 100, alignmentIntervalMs: 500 } };
+          stats: { width: w, height: h, durationMs: Math.round(length * 1000), compositeFrames: painter.frames, ghostEndedEarly: painter.endedEarly, layerPreparationMs, maxPaintMs: Math.round(maxPaintMs), audioTracks: audio.length, audio: 'capture-stream-reencoded', scanIntervalMs: 100, alignmentIntervalMs: 500 } };
       } finally { clearTimeout(watchdog); document.removeEventListener('visibilitychange', interrupted); }
     } finally {
       clearTimeout(timer); if (frameId !== undefined) video.cancelVideoFrameCallback(frameId);
