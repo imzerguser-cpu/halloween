@@ -411,7 +411,7 @@
     return vs.find((v) => v.name === conf.voice) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
   }
   // 외부 AI 목소리: 시트 스크립트가 만들어 준 mp3 를 태블릿에도 저장(IndexedDB)해 두고 재생. 실패하면 태블릿 음성
-  const ttsProvider = () => { const v = setting('나레이션방식', '클로바'); return v === 'ElevenLabs' || v === '클로바' ? v : ''; };
+  const ttsProvider = () => { const v = setting('나레이션방식', '태블릿'); return v === 'ElevenLabs' || v === '클로바' ? v : ''; };
   const ttsDb = (() => {
     let p;
     const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open('hg-tts', 1); r.onupgradeneeded = () => r.result.createObjectStore('clips'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
