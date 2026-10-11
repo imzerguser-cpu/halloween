@@ -404,15 +404,64 @@
   }
 
   // 나레이션: 태블릿의 한국어 음성(구글·삼성 TTS)으로 읽는다. 무서움 단계별 말투(속도·높이)
-  const narrationOn = () => setting('나레이션', '예') !== '아니오' && 'speechSynthesis' in window;
+  const narrationOn = () => setting('나레이션', '예') !== '아니오';
   function koVoices() { return ('speechSynthesis' in window ? speechSynthesis.getVoices() : []).filter((v) => /^ko/i.test(v.lang)); }
   function pickVoice() {
     const vs = koVoices();
     return vs.find((v) => v.name === conf.voice) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
   }
-  function narrate(text, opts) {
+  // 외부 AI 목소리: 시트 스크립트가 만들어 준 mp3 를 태블릿에도 저장(IndexedDB)해 두고 재생. 실패하면 태블릿 음성
+  const ttsProvider = () => { const v = setting('나레이션방식', '태블릿'); return v === 'ElevenLabs' || v === '클로바' ? v : ''; };
+  const ttsDb = (() => {
+    let p;
+    const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open('hg-tts', 1); r.onupgradeneeded = () => r.result.createObjectStore('clips'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+    return {
+      get: async (k) => { const d = await open(); return new Promise((res) => { const q = d.transaction('clips').objectStore('clips').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); },
+      put: async (k, v) => { const d = await open(); return new Promise((res) => { const t = d.transaction('clips', 'readwrite'); t.objectStore('clips').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); }
+    };
+  })();
+  const ttsKey = (prov, lv, text) => prov + '|' + lv + '|' + setting(prov === '클로바' ? '클로바목소리_' + FEAR_KEY[lv] : '나레이션목소리_' + FEAR_KEY[lv], '') + '|' + setting('나레이션목소리', '') + '|' + text;
+  async function ttsClip(text, lv) {
+    const prov = ttsProvider(); if (!prov) return null;
+    const k = ttsKey(prov, lv, text);
+    const hit = await ttsDb.get(k).catch(() => null); if (hit) return hit;
+    if (!conf.apiUrl || !conf.apiKey || !navigator.onLine) return null;
+    const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: conf.apiKey, action: 'tts', provider: prov, level: lv, text }) });
+    const j = await r.json();
+    if (!j.ok) { ttsError = j.error + (j.detail ? ' ' + j.detail : ''); return null; }
+    const bin = atob(j.data), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const blob = new Blob([u8], { type: j.mime || 'audio/mpeg' });
+    await ttsDb.put(k, blob).catch(() => {});
+    return blob;
+  }
+  let ttsError = '', narrAudio = null, narrToken = 0;
+  /** 이 장소에서 쓸 이야기(3단계, 출발 장소면 프롤로그도)를 미리 만들어 둔다 — 행사 중 와이파이가 끊겨도 재생 */
+  async function prefetchNarration() {
+    if (!ttsProvider() || !station()) return;
+    const s = station(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
+    for (let lv = 0; lv < 3; lv++) {
+      const txt = ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
+      if (txt) await ttsClip(cleanSpeech(txt), lv).catch(() => {});
+      if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
+    }
+  }
+  const cleanSpeech = (t) => String(t || '').replace(/[「」📜😊]/g, '').trim();
+  async function narrate(text, opts) {
     if (!narrationOn() || !text) return;
     stopNarration();
+    const token = ++narrToken;
+    const lv0 = opts && opts.level != null ? opts.level : storyLevel();
+    if (ttsProvider()) {
+      try {
+        const clip = await ttsClip(cleanSpeech(text), lv0);
+        if (token !== narrToken) return;
+        if (clip) { narrAudio = new Audio(URL.createObjectURL(clip)); narrAudio.play().catch(() => {}); return; }
+      } catch (e) { ttsError = e.message; }
+      if (token !== narrToken) return;
+    }
+    if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text.replace(/[「」📜😊]/g, ''));
     u.lang = 'ko-KR';
     const v = pickVoice(); if (v) u.voice = v;
@@ -423,7 +472,11 @@
     u.volume = 1;
     speechSynthesis.speak(u);
   }
-  function stopNarration() { try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {} }
+  function stopNarration() {
+    narrToken++;
+    try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+    if (narrAudio) { try { narrAudio.pause(); URL.revokeObjectURL(narrAudio.src); } catch (e) {} narrAudio = null; }
+  }
   if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { if (!$('scrAdmin').hidden) renderVoices(); };
   function renderVoices() {
     const sel = $('selVoice'); if (!sel) return;
@@ -1130,7 +1183,12 @@
     $('btnStoryNext').onclick = nextStory;
     $('btnStoryReplay').onclick = () => narrate(storyPages[storyIdx] && storyPages[storyIdx].text);
     $('selVoice').onchange = (e) => { conf.voice = e.target.value; writeLS(LS_CONF, conf); };
-    $('btnVoiceTest').onclick = () => { const lv = Number($('selVoiceLevel').value); narrate(prologueText(lv), { level: lv }); };
+    $('btnVoiceTest').onclick = async () => {
+      const lv = Number($('selVoiceLevel').value); ttsError = '';
+      await narrate(prologueText(lv), { level: lv });
+      toast(ttsProvider() ? (ttsError ? ttsProvider() + ' 실패 → 태블릿 음성으로 읽었어요: ' + ttsError : ttsProvider() + ' 목소리로 읽어요') : '태블릿 음성으로 읽어요', 5000);
+    };
+    $('btnVoicePrefetch').onclick = async () => { if (!ttsProvider()) return toast('강도 설정에서 나레이션 방식을 ElevenLabs 나 클로바로 고르세요'); toast('이 장소 나레이션을 만드는 중… (1분쯤)', 4000); ttsError = ''; await prefetchNarration(); toast(ttsError ? '일부 실패: ' + ttsError : '이 장소 나레이션을 태블릿에 저장했어요', 5000); };
     $('btnNextGo').onclick = () => { const g = nextTeam(); if (g) startTeam(g); };
     $('btnOtherTeam').onclick = showTeamGrid;
     document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });
@@ -1183,6 +1241,7 @@
     goHome();
     await loadRoster(true);   // 이름은 메모리로만. 실패하면 저장된 설정(이름 없음)으로 진행
     await loadAsset();
+    setTimeout(prefetchNarration, 3000);                 // AI 목소리를 쓰면 이 장소 이야기를 미리 만들어 둔다
     if (!$('scrSetup').hidden && station()) goHome();   // 시트에서 장소를 받아 왔으면 바로 시작 화면으로
     else if (!$('scrHome').hidden) renderHome();
     runEdits();               // 지난번에 못 끝낸 영상 편집 이어서

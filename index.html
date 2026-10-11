@@ -595,7 +595,9 @@ button{touch-action:manipulation}
         <p>이야기를 읽어 줄 목소리를 고르세요. 태블릿에 깔린 한국어 음성(구글·삼성)만 보입니다. 더 자연스러운 목소리가 필요하면 태블릿 <b>설정 → 일반 → 텍스트 음성 변환</b>에서 음성 데이터를 받으세요.</p>
         <label class="field"><span>목소리</span><select id="selVoice"></select></label>
         <div class="row"><select id="selVoiceLevel" style="width:auto;padding:9px 10px;border-radius:9px;background:#0f1116;color:#fff;border:1px solid #3a3f50"><option value="0">😱 너무 무서워요 말투</option><option value="1" selected>😬 조금 무서워요 말투</option><option value="2">😎 하나도 안 무서워요 말투</option></select>
-        <button class="btn sm" id="btnVoiceTest">🔊 미리 듣기</button></div>
+        <button class="btn sm" id="btnVoiceTest">🔊 미리 듣기</button>
+        <button class="btn sm ghost" id="btnVoicePrefetch">⬇ 이 장소 나레이션 미리 만들기</button></div>
+        <p style="margin-top:8px">강도 설정의 <b>나레이션 방식</b>을 ElevenLabs 나 클로바로 고르면 AI 목소리로 읽습니다(시트 스크립트에 키 필요). 위 목록은 태블릿 음성일 때 쓰입니다.</p>
       </div>
       <div class="panel">
         <h3>조 번호 초기화 (리허설 뒤)</h3>

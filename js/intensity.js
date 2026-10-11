@@ -14,7 +14,7 @@
     '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
-    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예'
+    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿'
   };
   function get(st, k) {
     st = st || {};
@@ -66,7 +66,10 @@
     <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
   </div>
   <div class="int-row"><span>이야기 읽어 주기</span>
-    <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기 (태블릿 한국어 음성)</label>
+    <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>
+  </div>
+  <div class="int-row"><span>나레이션 목소리</span>
+    ${[['태블릿', '태블릿 음성 (무료·바로 됨)'], ['ElevenLabs', 'ElevenLabs (감정 표현 풍부)'], ['클로바', '네이버 클로바 (한국어 발음 정확)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-voice" value="${v}"${get(st, '나레이션방식') === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
     <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">
@@ -101,6 +104,7 @@
         el.querySelectorAll('input[type=text][data-k]').forEach((t) => { o[t.dataset.k] = t.value.trim() || DEF[t.dataset.k] || ''; });
         const rv = el.querySelector('input[name="int-reveal"]:checked'); if (rv) o['공개방식'] = rv.value;
         const pk = el.querySelector('input[name="int-pick"]:checked'); if (pk) o['조선정'] = pk.value;
+        const vc = el.querySelector('input[name="int-voice"]:checked'); if (vc) o['나레이션방식'] = vc.value;
         return o;
       };
       const save = async (o, label) => {
