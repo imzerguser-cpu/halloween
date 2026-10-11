@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>🎃 할로윈 방탈출</title>
+<title>🎃 할로윈 탐험대</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@500;700;900&family=Nanum+Myeongjo:wght@700;800&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#120d21;--ink:#efe6cf;--gold:#ffcf7a;--gold-lt:#ffe9b8;--lilac:#c9b9e8;--green:#9ce6b4;--red:#ff8fa0;
@@ -139,13 +139,164 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
 .modal img{max-width:100%;max-height:78vh;border-radius:8px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:10px;z-index:60;font-size:15px;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+
+/* 010 · 달빛 성문. 관리 화면의 기존 스타일은 유지한다. */
+.screen:not(#scrAdmin){
+  --ink:#fff1d9;--gold:#ffc16b;--gold-lt:#ffe4ac;--lilac:#e2cfe7;
+  font-family:'Jua','Malgun Gothic',sans-serif;font-weight:400;
+  background:radial-gradient(ellipse at 12% 24%,#49305f55,transparent 55%),#25183e;
+  min-height:100svh;color:var(--ink);
+}
+.screen:not(#scrAdmin) :is(h1,h2,h3,.hd-title,.next-team,.gbtn){font-family:inherit;font-weight:400}
+.screen:not(#scrAdmin) .hd{background:transparent;border:0;box-shadow:none;padding:22px 36px;gap:18px;min-height:80px}
+.screen:not(#scrAdmin) .hd-title{font-size:23px;text-shadow:none}
+.screen:not(#scrAdmin) .hd-sub{font-size:20px;color:#ddc8e7}
+.screen:not(#scrAdmin) .wrap{max-width:1000px;padding:24px 36px 40px}
+.screen:not(#scrAdmin) .big-title{font-size:42px;line-height:1.3;font-weight:400;text-shadow:0 3px #160f25;margin:8px 0 18px}
+.screen:not(#scrAdmin) .lead{font-size:24px;line-height:1.6;color:#efdeeb}
+.screen:not(#scrAdmin) .card{background:#493253;border:1px solid #9a738b;border-radius:28px;padding:32px;box-shadow:0 8px 24px #120c242b}
+.screen:not(#scrAdmin) .btn{min-height:64px;border:2px solid #ffe0a1;border-radius:20px;background:#ffc16b;color:#32203f;box-shadow:0 6px 0 #a85d32;font-size:25px;font-weight:400;padding:14px 26px;touch-action:manipulation}
+.screen:not(#scrAdmin) .btn.ghost{background:#352443;color:#f6e6f2;border:1px solid #b49bb8;box-shadow:none;font-size:22px}
+.screen:not(#scrAdmin) .btn:active{transform:translateY(3px);box-shadow:none}
+.screen:not(#scrAdmin) .btn:disabled{opacity:.55;cursor:default}
+.screen:not(#scrAdmin) .row{gap:18px}
+.screen:not(#scrAdmin) .big-go{width:100%;min-height:88px;font-size:32px;border-radius:24px}
+.screen:not(#scrAdmin) .names{font-size:28px;font-weight:400}
+.screen:not(#scrAdmin) .next-team{font-size:84px;text-shadow:none;line-height:1.15}
+.screen:not(#scrAdmin) .size-btn{min-height:100px;min-width:170px;font-size:32px}
+.screen:not(#scrAdmin) .fear-btn{font-size:25px;min-height:142px;min-width:220px}
+.screen:not(#scrAdmin) .gbtn{min-height:88px;aspect-ratio:auto;padding:14px 8px;background:#493253;border:1px solid #b49bb8;border-radius:20px;color:#ffe4ac;font-size:32px;box-shadow:0 4px 0 #170f28}
+.screen:not(#scrAdmin) .gbtn small{font-family:'Noto Sans KR','Malgun Gothic',sans-serif;font-size:17px;color:#efdeeb}
+.screen:not(#scrAdmin) .gbtn.done{background:#344549;border-color:#9dc8b7}
+.screen:not(#scrAdmin) .parch{position:relative;background:linear-gradient(105deg,#f1ddbd,#fff1d9 45%,#eddbb9);border:2px solid #c19a63;border-radius:20px;padding:32px;color:#493021;box-shadow:0 7px 0 #84603d,inset 0 0 24px #b5894422}
+.screen:not(#scrAdmin) .mission-text{font-size:30px;font-weight:400;line-height:1.65;overflow-wrap:anywhere}
+.screen:not(#scrAdmin) .clue-label{font-size:21px;font-weight:400;color:#765738;margin-bottom:8px}
+.screen:not(#scrAdmin) .clue .mission-text{font-size:25px}
+button:focus-visible,input:focus-visible{outline:4px solid #55d8d0;outline-offset:5px}
+button{touch-action:manipulation}
+#scrHome .home-layout{max-width:1320px;display:grid;grid-template-columns:1.05fr 1fr;gap:42px;align-items:center;padding:16px 44px 28px}
+.gate-art{position:relative;min-width:0}
+.gate-frame{position:relative;width:100%;aspect-ratio:2304/1720;overflow:hidden;border-radius:48% 48% 26px 26px;border:2px solid #d7a95d;box-shadow:0 0 80px #9c59d326;container-type:inline-size}
+.gate-frame img{display:block;width:100%;height:100%}
+.gate-frame:after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(transparent 72%,#20132b99)}
+.school-name{position:absolute;left:48.2%;top:57.6%;transform:translate(-50%,-50%) rotate(-.6deg);width:31%;text-align:center;color:#ffe3a0;text-shadow:0 2px 1px #351908,-1px -1px 0 #613116;font-size:clamp(13px,2vw,26px);font-size:4.3cqw;line-height:1.15;overflow-wrap:anywhere;z-index:1}
+.gate-caption{text-align:center;color:#ffe4ac;font-size:23px;margin-top:20px}
+.gate-star{position:absolute;color:#f8ca7a;font-size:38px;top:15%;left:-12px;pointer-events:none}
+.home-content{text-align:center;min-width:0;padding:12px 0}
+.home-eyebrow{color:#e5c388;letter-spacing:3px;font-size:20px;margin-bottom:14px}
+#scrHome .adventure-title{font-size:clamp(48px,5.2vw,68px);line-height:1.12;margin:0 0 24px;color:#fff1d9;text-shadow:0 4px #100e23}
+.adventure-title span{color:#ffc56b}
+#scrHome #homeTitle{display:inline-block;font-size:25px;line-height:1.4;background:#493253;border:1px solid #8b667d;border-radius:30px;padding:10px 24px;text-shadow:none;margin:0 0 18px}
+#homeStation{margin-top:4px}
+#scrHome #homeLead:empty{display:none}
+#scrHome .next-card{background:#fff1d9;color:#39264a;border:0;box-shadow:0 6px 0 #a78166;padding:20px 24px}
+#scrHome .next-card :is(.hd-sub,.next-team,.names){color:#39264a}
+#scrHome .next-card .hd-sub{font-size:21px;color:#765738}
+/* 다음 순서 카드: 공통 .card(보라)보다 우선 + 한 화면에 다 들어가게 */
+#scrHome .card.next-card{background:#fff1d9;border:0;box-shadow:0 6px 0 #a78166;padding:16px 24px;max-width:520px}
+#scrHome:has(#homeNext:not([hidden])) .home-eyebrow{display:none}
+#scrHome:has(#homeNext:not([hidden])) .adventure-title{font-size:clamp(40px,4.2vw,54px);margin-bottom:12px}
+#scrHome:has(#homeNext:not([hidden])) #homeLead{margin:10px 0 12px}
+#scrHome .card.next-card .next-team{font-size:64px;line-height:1.05}
+#scrHome .card.next-card #btnNextGo{margin-top:10px!important}
+#scrHome #btnOtherTeam{min-height:56px}
+#scrHome .next-team{font-size:70px}
+#scrHome #nextSize{font-size:25px}
+#scrHome .groups{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.home-footer{display:flex;justify-content:space-between;gap:20px;padding:14px 44px 24px;color:#c8b3d5;font-size:18px}
+.home-footer span:nth-child(2){color:#efc17d;letter-spacing:8px}
+#scrSetup .wrap{display:flex;flex-direction:column;justify-content:center}
+#scrSetup h2,#scrPin h2{font-size:34px}
+#scrTeam .big-title{font-size:34px!important}
+#scrTeam #teamDone{background:#fff1d9;color:#39264a}
+#scrTeam #teamDone :is(.hd-sub,.names,.next-team,.lead){color:#493253}
+#scrResult .photo-box{border:6px solid #fff1d9;border-radius:20px;transform:none;box-shadow:0 8px 28px #10092366}
+#scrResult :is(.photo-box img,#resVideo){max-height:42vh}
+#scrResult .burst-grid{gap:12px}
+#scrResult .burst-grid img{border:4px solid #fff1d9;border-radius:14px}
+#scrResult .count-card{max-width:760px}
+#scrResult .count-card .btn{min-width:68px;padding:10px}
+#scrResult .clue{max-width:760px}
+#scrSaving .spinner{width:72px;height:72px;border-color:#715775;border-top-color:#ffc16b}
+#scrSaving #savingMsg{font-size:32px!important}
+#scrSaving .save-track{height:16px;background:#503956}
+#scrSaving .save-bar{background:#ffc16b}
+#scrPin .pinpad{grid-template-columns:repeat(3,94px);gap:14px}
+#scrPin .pinpad button{min-height:76px;background:#493253;border:1px solid #b49bb8;color:#fff1d9;border-radius:18px;font:32px 'Jua','Malgun Gothic',sans-serif}
+#scrPin .pinpad .pin-ok{background:#ffc16b;color:#32203f;border-color:#ffe0a1}
+#scrPin .pin-dots{margin:24px 0 30px}
+#scrPin .pin-dots i{width:20px;height:20px}
+#scrCamera{background:#000;min-height:0}
+#scrCamera .cam-top{font-size:24px;padding:18px 28px;background:linear-gradient(#000b,transparent);font-weight:400}
+#scrCamera .cam-hint{font-size:23px;top:66px;font-weight:400}
+#scrCamera .cam-bar{gap:18px;min-height:120px;padding:18px 28px calc(18px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#000c)}
+#scrCamera .cam-bar .btn.ghost{background:#25183edb;color:#fff1d9;border-color:#c5afca}
+#scrCamera #camTimerLabel{font-size:21px;min-height:64px}
+#camTimer{width:26px;height:26px;accent-color:#ffc16b}
+#scrCamera .shutter{width:88px;height:88px;flex-shrink:0;border-color:#ffe4ac;outline:2px solid #25183e;outline-offset:3px}
+#scrCamera .countdown{font-weight:400;font-size:160px}
+#scrCamera .rec-badge{top:108px;font-weight:400;background:#25183ee6;border:1px solid #b49bb8}
+#scrCamera .burst-count{top:108px;font-size:28px;background:#25183ee6;font-weight:400}
+#scrCamera .stop-btn{font-size:clamp(36px,7vw,64px);background:#ffb0a1;color:#411d32;border-color:#ffe1d7;box-shadow:0 7px 0 #924853;bottom:128px;height:min(18vh,140px)}
+#scrCamera .stop-btn:active{transform:translate(-50%,3px)}
+#scrCamera .scan-frame{border-color:#ffc16b;border-radius:20px}
+#scrCamera .scan-panel{bottom:130px;padding:16px 20px;background:#25183ee8;border-top:1px solid #8b667d}
+#scrCamera .scan-msg{font-size:24px;font-weight:400;text-shadow:none}
+#scrCamera #scanInput{min-height:64px;background:#fff1d9;color:#32203f;border:2px solid #ffc16b;font:22px 'Jua','Malgun Gothic',sans-serif;width:min(65vw,400px)}
+#scanInput::placeholder{color:#765b76;opacity:1}
+#scrCamera.lit{background:#fff}
+#scrCamera.lit .cam-top{background:#fff;color:#25183e;text-shadow:none}
+#scrCamera.lit .cam-hint{color:#25183e;background:#fffb;border-radius:12px;width:fit-content;max-width:90%;margin:auto;padding:4px 16px;text-shadow:none}
+#scrCamera.lit .cam-bar{background:#fff}
+#scrCamera.lit .cam-bar .btn.ghost{background:#fff1d9;color:#25183e;border-color:#765b76}
+#scrCamera.lit .shutter{background:#eadfec;border-color:#493253}
+#scrCamera.lit #camTimerLabel{color:#25183e!important}
+#scrCamera.lit .countdown{color:#fff1d9;text-shadow:0 3px 5px #25183e,0 0 24px #25183e}
+.toast{font:22px/1.5 'Jua','Malgun Gothic',sans-serif;background:#fff1d9;color:#352148;border:2px solid #96749c;padding:18px 28px;border-radius:20px;max-width:calc(100vw - 40px);width:max-content;text-align:center;box-shadow:0 8px 35px #0004}
+@media(max-width:900px){
+  #scrHome .home-layout{grid-template-columns:1fr;max-width:660px;gap:24px;padding:12px 30px 24px}
+  .gate-art{width:100%;max-width:550px;margin:0 auto}
+  .gate-frame{aspect-ratio:2304/1720}
+  .gate-caption{margin-top:12px;font-size:21px}
+  #scrHome .adventure-title{font-size:58px;margin-bottom:18px}
+  .adventure-title br{display:none}.adventure-title span{margin-left:12px}
+  .home-eyebrow{margin-bottom:10px}
+  .home-footer{padding:12px 30px 24px}
+  #scrCamera .scan-frame{top:38%}
+}
+@media(max-width:540px){
+  .screen:not(#scrAdmin) .hd{padding:18px;flex-wrap:wrap;gap:8px}
+  .screen:not(#scrAdmin) .hd-title{font-size:20px}
+  .screen:not(#scrAdmin) .wrap{padding:18px 20px 32px}
+  .screen:not(#scrAdmin) .card{padding:24px 18px}
+  .screen:not(#scrAdmin) .lead{font-size:21px}
+  .screen:not(#scrAdmin) .btn{font-size:22px;padding:12px 18px}
+  .screen:not(#scrAdmin) .size-btn{min-width:80px;flex:1;font-size:27px}
+  .screen:not(#scrAdmin) .fear-btn{flex-basis:100%;min-height:100px;font-size:24px}
+  #scrHome .home-layout{padding:10px 22px 24px}
+  #scrHome .adventure-title{font-size:43px}
+  .screen:not(#scrAdmin) .mission-text{font-size:25px}
+  .home-footer{font-size:16px;padding:12px 22px 24px}.home-footer span:nth-child(2){display:none}
+  #scrCamera .cam-top{font-size:20px;padding:12px}
+  #scrCamera .cam-hint{font-size:19px}
+  #scrCamera .cam-bar{gap:10px;padding:14px 12px calc(14px + env(safe-area-inset-bottom))}
+  #scrCamera .cam-bar .btn.ghost{font-size:18px;padding:10px}
+  #scrCamera #camTimerLabel{font-size:17px}
+  #scrCamera .scan-msg{font-size:20px}
+  #scrCamera #scanInput{width:65%;font-size:18px}
+  #scrResult .burst-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+
 </style>
 </head>
 <body>
 
 <!-- 준비 안 됨 -->
 <section class="screen" id="scrSetup" hidden>
-  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div></header>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div></header>
   <div class="wrap">
     <div class="card" style="text-align:center">
       <h2 style="margin-bottom:10px">선생님 설정이 필요해요</h2>
@@ -158,11 +309,22 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 <!-- 시작 (출발 장소: 우리 조 시작하기 / 다른 장소: 다음 순서) -->
 <section class="screen" id="scrHome" hidden>
   <header class="hd">
-    <div><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="homeStation"></div></div>
-    <div class="hd-sub">👻 유령 학교의 미션</div>
+    <div><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="homeStation"></div></div>
+    <div class="hd-sub">🔦 오늘 밤의 탐험</div>
   </header>
-  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
-    <h1 class="big-title" id="homeTitle">미션 장소</h1>
+  <div class="wrap home-layout">
+    <div class="gate-art">
+      <div class="gate-frame">
+        <img src="assets/castle-gate.webp" width="1600" height="1194" alt="달빛 아래 모험을 기다리는 성문" fetchpriority="high">
+        <span class="school-name">마동초등학교</span>
+      </div>
+      <span class="gate-star" aria-hidden="true">✧</span>
+      <p class="gate-caption">두근두근, 오늘 밤의 모험!</p>
+    </div>
+    <div class="home-content">
+      <p class="home-eyebrow">우리 함께, 용감하게!</p>
+      <h1 class="adventure-title">할로윈<br><span>탐험대</span></h1>
+    <h2 class="big-title" id="homeTitle">미션 장소</h2>
     <p class="lead" id="homeLead"></p>
     <div id="homeStart" class="row center" hidden>
       <button class="btn big-go" id="btnTeamStart">🎃 우리 조 시작하기</button>
@@ -181,11 +343,13 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
       <div class="groups" id="groupGrid"></div>
     </div>
   </div>
+  </div>
+  <footer class="home-footer"><span>친구들과 함께 도전해요</span><span aria-hidden="true">✦ · ✦</span><span>오늘 밤, 우리가 탐험대!</span></footer>
 </section>
 
 <!-- 출발: 인원·저학년 -->
 <section class="screen" id="scrTeam" hidden>
-  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div></header>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
     <div class="card" style="text-align:center" id="teamAskSize">
       <h2 class="big-title" style="font-size:30px">우리 조는 몇 명이에요?</h2>
@@ -223,7 +387,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 
 <!-- 미션 -->
 <section class="screen" id="scrMission" hidden>
-  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="misGroup"></div></header>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="misGroup"></div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
     <h2 class="big-title" id="misStation">📜 미션</h2>
     <div class="parch" style="margin:14px 0 22px"><div class="mission-text" id="misText"></div></div>
@@ -238,7 +402,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 <!-- 카메라 -->
 <section class="screen" id="scrCamera" hidden>
   <video id="camVideo" playsinline muted autoplay></video>
-  <div class="cam-top" id="camTop"></div>
+  <div class="cam-top" id="camTop" data-admin-tap></div>
   <div class="cam-hint" id="camHint" hidden>🔦 찍을 때는 손전등을 바닥으로!</div>
   <div class="countdown" id="camCount"></div>
   <div class="flash" id="camFlash"></div>
@@ -261,6 +425,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 
 <!-- 저장 중 -->
 <section class="screen" id="scrSaving" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
     <div class="spinner"></div>
     <h2 class="big-title" style="font-size:26px" id="savingMsg">사진을 저장하고 있어요...</h2>
@@ -270,7 +435,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 
 <!-- 결과 -->
 <section class="screen" id="scrResult" hidden>
-  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 방탈출</div><div class="hd-sub" id="resGroup"></div></header>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="resGroup"></div></header>
   <div class="wrap">
     <h2 class="big-title" id="resTitle">🎉 미션 성공!</h2>
     <p class="lead" id="resMsg">사진이 저장됐어요</p>
@@ -291,6 +456,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 
 <!-- PIN -->
 <section class="screen" id="scrPin" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
     <h2 style="color:var(--gold-lt)">교사 모드</h2>
     <div class="pin-dots" id="pinDots"></div>
@@ -328,7 +494,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
       </div>
       <div class="panel">
         <h3>③ 시작</h3>
-        <p>전체 화면으로 학생 화면을 엽니다. 교사 모드로 돌아오려면 제목(🎃 할로윈 방탈출)을 빠르게 5번 누르세요.</p>
+        <p>전체 화면으로 학생 화면을 엽니다. 교사 모드로 돌아오려면 제목(🎃 할로윈 탐험대)을 빠르게 5번 누르세요.</p>
         <button class="btn" id="btnStartStudent">학생 화면 시작 (전체 화면)</button>
       </div>
     </div>
@@ -399,7 +565,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
   <img id="modalImg" alt=""><video id="modalVideo" controls playsinline hidden style="max-width:100%;max-height:78vh;border-radius:8px"></video>
   <div class="row center" style="margin-top:12px" id="modalBtns"></div>
 </div>
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
 <script src="js/ghost-engine.js" defer></script>

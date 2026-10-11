@@ -191,6 +191,7 @@
       cache = { stations: j.stations, settings: j.settings, fetchedAt: j.fetchedAt };
       writeLS(LS_CACHE, cache);
       mergeOrder(j.groups || []);
+      applySchoolName();
       if (!silent) setStatus('connStatus', `불러옴: 장소 ${j.stations.length}곳, 출발한 조 ${Object.keys(teams).length}개 (${new Date().toLocaleTimeString()})`, 'ok');
       return true;
     } catch (e) {
@@ -199,6 +200,11 @@
     }
   }
 
+  // 학교 이름: 첫 화면 푯말 등 .school-name 자리에 넣는다 (관리자 설정에서 바꿈)
+  function applySchoolName() {
+    const name = setting('학교이름', '마동초등학교');
+    document.querySelectorAll('.school-name').forEach((el) => { if (el.textContent !== name) el.textContent = name; });
+  }
   function setStatus(id, msg, cls) { const el = $(id); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : ''); }
 
   // ---------- 드라이브 업로드 ----------
@@ -376,7 +382,7 @@
     '스태킹': { btn: '🎬 영상 찍으러 가기', lead: '시작을 누르면 시간이 흘러요. 다 쌓고 내리면 "끝!"을 눌러요!' },
     '탁구공': { btn: '🎬 영상 찍으러 가기', lead: '공을 던지는 모습을 영상으로 남겨요!' },
     '책찾기': { btn: '🔍 찾은 책 바코드 찍기', lead: '책을 찾으면 바코드를 찍어 확인해요!' },
-    '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요!' }
+    '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요! 사진을 몇 장 연달아 찍어요.' }
   };
   const stType = () => { const t = String(station().type || '사진').trim(); return TYPE[t] ? t : '사진'; };
   const stValue = (d) => { const v = parseFloat(station().value); return Number.isFinite(v) && v > 0 ? v : d; };
@@ -509,7 +515,7 @@
 
   // 연속사진: 10초 뒤 n장 (0.5초 간격), 귀신은 그중 한 장
   async function shootBurst() {
-    const n = Math.min(20, Math.round(stValue(10)));
+    const n = Math.min(20, Math.round(stValue(3)));
     $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
     await countdown(10, 1000);
     const frames = [];
@@ -528,7 +534,7 @@
     if (wantGhostHere()) {
       // 앞쪽 몇 장은 비우고, 가운데~뒤쪽 중 무작위 한 장부터 차례로 시도
       const order = [];
-      for (let i = Math.min(3, n - 1); i < n; i++) order.push(i);
+      for (let i = n >= 6 ? 3 : Math.min(1, n - 1); i < n; i++) order.push(i);   // 첫 장은 비워 둔다
       const start = Math.floor(Math.random() * order.length);
       let reason = 'not-applied';
       for (const i of order.slice(start).concat(order.slice(0, start))) {
@@ -873,6 +879,7 @@
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || '응답 오류');
         cache.settings = j.settings; writeLS(LS_CACHE, cache);
+        applySchoolName();
       }
     });
   }
@@ -1074,6 +1081,7 @@
 
   // ---------- 시작 ----------
   async function boot() {
+    applySchoolName();
     bind();
     buildPinPad();
     goHome();

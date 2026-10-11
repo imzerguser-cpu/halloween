@@ -14,7 +14,7 @@
     '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
-    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12'
+    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교'
   };
   function get(st, k) {
     st = st || {};
@@ -65,6 +65,9 @@
     <label class="int-chk"><input type="checkbox" data-k="저학년질문"${yes(get(st, '저학년질문')) ? ' checked' : ''}> 1·2학년 동생 있나요?</label>
     <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
   </div>
+  <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
+    <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">
+  </div>
   <div class="int-row int-pin"><span>교사 모드 비밀번호</span>
     <input type="password" inputmode="numeric" maxlength="8" placeholder="새 비밀번호 (숫자 4~8자리)" class="int-pin1" autocomplete="new-password">
     <input type="password" inputmode="numeric" maxlength="8" placeholder="한 번 더" class="int-pin2" autocomplete="new-password">
@@ -92,6 +95,7 @@
         el.querySelectorAll('select[data-k]').forEach((s) => { o[s.dataset.k] = s.value; });
         el.querySelectorAll('input[type=checkbox][data-k]').forEach((c) => { o[c.dataset.k] = c.checked ? '예' : '아니오'; });
         el.querySelectorAll('input[type=range][data-k]').forEach((r) => { o[r.dataset.k] = String(r.value); });
+        el.querySelectorAll('input[type=text][data-k]').forEach((t) => { o[t.dataset.k] = t.value.trim() || DEF[t.dataset.k] || ''; });
         const rv = el.querySelector('input[name="int-reveal"]:checked'); if (rv) o['공개방식'] = rv.value;
         const pk = el.querySelector('input[name="int-pick"]:checked'); if (pk) o['조선정'] = pk.value;
         return o;

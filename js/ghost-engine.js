@@ -61,9 +61,21 @@
   }
   function status() { return { ...state }; }
   function validate(asset) {
-    const m = asset.meta, b = m && m.bbox;
+    const m = asset.meta;
+    if (m && m.version === 2) {
+      if (!Array.isArray(m.layers) || !m.layers.length || m.layers.length > 4 || !Array.isArray(asset.layers) || asset.layers.length !== m.layers.length) throw Error('invalid-layers');
+      asset.layers.forEach((l, i) => {
+        const spec = m.layers[i];
+        if (!spec || !/^ghost-[1-9][0-9]*\.png$/.test(spec.file) || l.file !== spec.file || JSON.stringify(l.bbox) !== JSON.stringify(spec.bbox)) throw Error('invalid-layer');
+        validate({ meta: { ...m, version: 1, bbox: l.bbox }, background: asset.background, ghost: l.image });
+      });
+      if (new Set(asset.layers.map(l => l.file)).size !== asset.layers.length) throw Error('invalid-layer-duplicate');
+      return asset;
+    }
+    const b = m && m.bbox;
     if (!m || m.version !== 1 || !Number.isInteger(m.width) || !Number.isInteger(m.height) || m.width < 1 || m.height < 1 || m.width * m.height > 16000000 || !Array.isArray(b) || b.length !== 4 || !b.every(Number.isFinite) || b[0] < 0 || b[1] < 0 || b[2] <= 0 || b[3] <= 0 || b[0] + b[2] > m.width || b[1] + b[3] > m.height) throw new Error('소재 meta.json 규격 오류');
     for (const i of [asset.background, asset.ghost]) if ((i.naturalWidth || i.width) !== m.width || (i.naturalHeight || i.height) !== m.height) throw new Error('배경·귀신·메타의 크기가 다릅니다');
+    asset.layers = [{ image: asset.ghost, bbox: b, file: 'ghost.png' }];
     return asset;
   }
   async function loadAsset(path) {
@@ -72,8 +84,11 @@
     if (!cache.has(url.href)) {
       const promise = (async () => {
         const fetchFile = async name => { const r = await fetch(new URL(name, url)); if (!r.ok) throw new Error(name + ': HTTP ' + r.status); return r; };
-        const [meta, background, ghost] = await Promise.all([fetchFile('meta.json').then(r => r.json()), fetchFile('background.jpg').then(r => r.blob()).then(decode), fetchFile('ghost.png').then(r => r.blob()).then(decode)]);
-        return validate({ meta, background, ghost });
+        const meta = await fetchFile('meta.json').then(r => r.json());
+        const specs = meta.version === 2 ? meta.layers : [{ file: 'ghost.png', bbox: meta.bbox }];
+        if (!Array.isArray(specs) || !specs.length || specs.length > 4 || specs.some(l => !l || !/^(ghost\.png|ghost-[1-9][0-9]*\.png)$/.test(l.file))) throw Error('invalid-layers');
+        const [background, layers] = await Promise.all([fetchFile('background.jpg').then(r => r.blob()).then(decode), Promise.all(specs.map(async l => ({ ...l, image: await fetchFile(l.file).then(r => r.blob()).then(decode) })))]);
+        return validate({ meta, background, layers, ...(meta.version === 1 ? { ghost: layers[0].image } : {}) });
       })();
       cache.set(url.href, promise); promise.catch(() => cache.delete(url.href));
     }
@@ -85,14 +100,14 @@
   async function align(background, photo, bbox, person) {
     const w = 192, h = Math.max(32, Math.round(w * photo.height / photo.width));
     const a = pixels(draw(background, w, h)).data, b = pixels(draw(photo, w, h)).data;
-    const box = bbox.map((v, i) => v * (i % 2 ? h / background.height : w / background.width));
+    const boxes = (Array.isArray(bbox[0]) ? bbox : [bbox]).map(b => b.map((v, i) => v * (i % 2 ? h / background.height : w / background.width)));
     const p = person ? pixels(draw(person, w, h)).data : null;
     let best = { score: Infinity, dx: 0, dy: 0, texture: 0 };
     for (let dy = -5; dy <= 5; dy++) {
       for (let dx = -5; dx <= 5; dx++) {
         const errors = []; let texture = 0;
         for (let y = 8; y < h - 8; y += 3) for (let x = 8; x < w - 8; x += 3) {
-          if (x >= box[0] - 4 && x <= box[0] + box[2] + 4 && y >= box[1] - 4 && y <= box[1] + box[3] + 4) continue;
+          if (boxes.some(box => x >= box[0] - 4 && x <= box[0] + box[2] + 4 && y >= box[1] - 4 && y <= box[1] + box[3] + 4)) continue;
           const i = (y * w + x) * 4, j = ((y + dy) * w + x + dx) * 4;
           if (p && p[j + 3] > 30) continue;
           const ax = luma(a, i + 4) - luma(a, i - 4), ay = luma(a, i + w * 4) - luma(a, i - w * 4);
@@ -144,34 +159,61 @@
     }
     return { gain, noise: clamp(median(noise) * .6, 0, 2.5), blur: sharpB.length > 15 && median(sharpP) < median(sharpB) * .78 ? .55 : .2, b, p, g, w, h };
   }
+  // Robust scene exposure excludes all candidate rectangles.
+  function candidateCheck(background, photo, boxes, index, person) {
+    const w = 192, h = Math.max(32, Math.round(w * photo.height / photo.width));
+    const b = pixels(draw(background, w, h)).data, p = pixels(draw(photo, w, h)).data;
+    const m = person ? pixels(draw(person, w, h)).data : null;
+    const scaled = boxes.map(box => box.map((v, k) => v * (k % 2 ? h / photo.height : w / photo.width)));
+    const inside = (x, y, box) => x >= box[0] - 3 && x < box[0] + box[2] + 3 && y >= box[1] - 3 && y < box[1] + box[3] + 3;
+    const ratios = [[], [], []];
+    for (let y = 2; y < h - 2; y += 3) for (let x = 2; x < w - 2; x += 3) {
+      const i = (y * w + x) * 4;
+      if (scaled.some(box => inside(x, y, box)) || b[i + 3] < 250 || (m && m[i + 3] > 30)) continue;
+      for (let k = 0; k < 3; k++) if (b[i + k] > 12 && b[i + k] < 235 && p[i + k] < 250) ratios[k].push(p[i + k] / b[i + k]);
+    }
+    if (ratios.some(a => a.length < 24)) return { ok: false, weight: 0 };
+    const gain = ratios.map(a => clamp(median(a), .5, 2)), box = scaled[index];
+    if (box[0] < 0 || box[1] < 0 || box[0] + box[2] > w || box[1] + box[3] > h) return { ok: false, weight: 0 };
+    let count = 0, changed = 0, lit = 0, brightness = 0, covered = 0;
+    for (let y = Math.max(0, Math.floor(box[1] - 3)); y < Math.min(h, box[1] + box[3] + 3); y++) for (let x = Math.max(0, Math.floor(box[0] - 3)); x < Math.min(w, box[0] + box[2] + 3); x++) {
+      const i = (y * w + x) * 4;
+      if (m && m[i + 3] > 30) { covered++; continue; }
+      count++;
+      const expected = .299 * b[i] * gain[0] + .587 * b[i + 1] * gain[1] + .114 * b[i + 2] * gain[2], actual = luma(p, i);
+      if (actual - expected > 18 && (actual + 8) / (expected + 8) > 1.3) lit++;
+      if (Math.max(...gain.map((g, k) => Math.abs(p[i + k] - Math.min(255, b[i + k] * g)))) > 22) changed++;
+      brightness += actual;
+    }
+    const mean = brightness / Math.max(1, count);
+    return { ok: count > 0 && covered / (count + covered) < .85 && lit / count <= .03 && changed / count <= .015,
+      weight: 1 / (20 + mean), brightness: mean, lit: lit / Math.max(1, count), changed: changed / Math.max(1, count), gain };
+  }
+  function weighted(items) {
+    let value = Math.random() * items.reduce((n, item) => n + item.weight, 0);
+    return items.find(item => (value -= item.weight) <= 0) || items[items.length - 1];
+  }
   async function composite(input, asset, { quality = .92 } = {}) {
     const started = performance.now(), photo = input instanceof Blob ? await decode(input) : draw(input);
     const q = Number.isFinite(quality) ? clamp(quality, .1, 1) : .92;
-    const result = async (applied, reason, output = photo) => ({ blob: !applied && input instanceof Blob && input.type === 'image/jpeg' ? input : await encode(output, 'image/jpeg', q), applied, ...(reason ? { reason } : {}), ms: Math.round(performance.now() - started) });
+    let selected;
+    const result = async (applied, reason, output = photo) => ({ blob: !applied && input instanceof Blob && input.type === 'image/jpeg' ? input : await encode(output, 'image/jpeg', q), applied, ...(applied && selected ? { layer: selected.file } : {}), ...(reason ? { reason } : {}), ms: Math.round(performance.now() - started) });
     try {
       validate(asset);
       if (photo.width * photo.height > 12000000 || Math.max(photo.width, photo.height) > 4096) return result(false, 'photo-too-large');
       if (Math.abs(photo.width / photo.height / (asset.meta.width / asset.meta.height) - 1) > .025) return result(false, 'aspect-ratio-mismatch');
       await pause(); const person = await personMask(photo);
-      const registration = await align(asset.background, photo, asset.meta.bbox, person);
+      const registration = await align(asset.background, photo, asset.layers.map(l => l.bbox), person);
       if (registration.score > 18 || registration.boundary) return result(false, 'background-alignment-uncertain');
       const bg = canvas(photo.width, photo.height), layer = canvas(photo.width, photo.height);
       bg.getContext('2d').drawImage(asset.background, registration.dx, registration.dy, photo.width, photo.height);
-      layer.getContext('2d').drawImage(asset.ghost, registration.dx, registration.dy, photo.width, photo.height);
-      const bx = asset.meta.bbox, sx = photo.width / asset.meta.width, sy = photo.height / asset.meta.height;
-      if (bx[0] * sx + registration.dx < 0 || bx[1] * sy + registration.dy < 0 || (bx[0] + bx[2]) * sx + registration.dx > photo.width || (bx[1] + bx[3]) * sy + registration.dy > photo.height) return result(false, 'ghost-out-of-frame');
+      const sx = photo.width / asset.meta.width, sy = photo.height / asset.meta.height;
+      const boxes = asset.layers.map(l => [l.bbox[0] * sx + registration.dx, l.bbox[1] * sy + registration.dy, l.bbox[2] * sx, l.bbox[3] * sy]);
+      const candidates = asset.layers.map((l, i) => ({ ...l, ...candidateCheck(bg, photo, boxes, i, person) })).filter(l => l.ok);
+      if (!candidates.length) return result(false, 'no-dark-candidate');
+      selected = weighted(candidates);
+      layer.getContext('2d').drawImage(selected.image, registration.dx, registration.dy, photo.width, photo.height);
       const tuning = fit(bg, photo, layer, person);
-      if (!person) {
-        let changed = 0, count = 0;
-        // Compare the whole bounding rectangle (including holes) with a safety margin.
-        const x0 = (bx[0] * sx + registration.dx) * tuning.w / photo.width, y0 = (bx[1] * sy + registration.dy) * tuning.h / photo.height;
-        const x1 = x0 + bx[2] * tuning.w / asset.meta.width, y1 = y0 + bx[3] * tuning.h / asset.meta.height;
-        for (let y = Math.max(0, Math.floor(y0 - 3)); y < Math.min(tuning.h, y1 + 3); y++) for (let x = Math.max(0, Math.floor(x0 - 3)); x < Math.min(tuning.w, x1 + 3); x++) {
-          const i = (y * tuning.w + x) * 4; count++;
-          if (Math.max(...tuning.gain.map((v, k) => Math.abs(tuning.p[i + k] - tuning.b[i + k] * v))) > 22) changed++;
-        }
-        if (!count || changed / count > .015) return result(false, 'segmentation-unavailable-overlap-uncertain');
-      }
       const data = pixels(layer); let seed = 123456789;
       for (let y = 0; y < layer.height; y++) {
         for (let x = 0; x < layer.width; x++) { const i = (y * layer.width + x) * 4; if (!data.data[i + 3]) continue;
@@ -214,43 +256,28 @@
     const hud = overlay ? canvas(w, h) : null, hc = hud && hud.getContext('2d');
     oc.drawImage(video, 0, 0, w, h);
     let reason = asset ? 'ghost-time-not-reached' : 'no-asset';
-    let background, layer, probe, pc, reference, box, tuned = false, eligible = !!asset;
+    let background, layer, registration, boxes, selected, tuned = false, eligible = !!asset;
     if (asset) {
       if (Math.abs(w / h / (asset.meta.width / asset.meta.height) - 1) > .025) { eligible = false; reason = 'aspect-ratio-mismatch'; }
       if (eligible) {
-        const registration = await align(asset.background, original, asset.meta.bbox, null);
+        registration = await align(asset.background, original, asset.layers.map(l => l.bbox), null);
         if (registration.score > 18 || registration.boundary) { eligible = false; reason = 'background-alignment-uncertain'; }
         else {
           background = canvas(w, h); layer = canvas(w, h);
           background.getContext('2d').drawImage(asset.background, registration.dx, registration.dy, w, h);
-          layer.getContext('2d').drawImage(asset.ghost, registration.dx, registration.dy, w, h);
-          const b = asset.meta.bbox, sx = w / asset.meta.width, sy = h / asset.meta.height;
-          const bounds = [b[0] * sx + registration.dx, b[1] * sy + registration.dy, b[2] * sx, b[3] * sy];
-          if (bounds[0] < 0 || bounds[1] < 0 || bounds[0] + bounds[2] > w || bounds[1] + bounds[3] > h) { eligible = false; reason = 'ghost-out-of-frame'; }
-          probe = canvas(192, Math.max(2, Math.round(192 * h / w))); pc = probe.getContext('2d', { willReadFrequently: true });
-          reference = pixels(draw(background, probe.width, probe.height)).data;
-          box = bounds.map((v, i) => v * (i % 2 ? probe.height / h : probe.width / w));
+          const sx = w / asset.meta.width, sy = h / asset.meta.height;
+          boxes = asset.layers.map(l => [l.bbox[0] * sx + registration.dx, l.bbox[1] * sy + registration.dy, l.bbox[2] * sx, l.bbox[3] * sy]);
         }
       }
     }
     if (document.hidden || video.paused || video.ended) throw new Error('camera-interrupted-during-setup');
     function spaceClear() {
-      pc.drawImage(original, 0, 0, probe.width, probe.height);
-      const current = pc.getImageData(0, 0, probe.width, probe.height).data;
-      const ratios = [[], [], []];
-      // Exposure estimate from the rest of the room, not from a person covering the ghost.
-      for (let y = 2; y < probe.height - 2; y += 4) for (let x = 2; x < probe.width - 2; x += 4) {
-        if (x >= box[0] - 3 && x <= box[0] + box[2] + 3 && y >= box[1] - 3 && y <= box[1] + box[3] + 3) continue;
-        const i = (y * probe.width + x) * 4;
-        for (let k = 0; k < 3; k++) if (reference[i + k] > 20 && reference[i + k] < 235) ratios[k].push(current[i + k] / reference[i + k]);
-      }
-      const gain = ratios.map(a => clamp(a.length ? median(a) : 1, .65, 1.45));
-      let changed = 0, count = 0;
-      for (let y = Math.max(0, Math.floor(box[1] - 3)); y < Math.min(probe.height, box[1] + box[3] + 3); y++) for (let x = Math.max(0, Math.floor(box[0] - 3)); x < Math.min(probe.width, box[0] + box[2] + 3); x++) {
-        const i = (y * probe.width + x) * 4; count++;
-        if (Math.max(...gain.map((v, k) => Math.abs(current[i + k] - reference[i + k] * v))) > 22) changed++;
-      }
-      return count > 0 && changed / count <= .015;
+      if (selected) return candidateCheck(background, original, boxes, selected.index, null).ok;
+      const available = asset.layers.map((l, index) => ({ ...l, index, ...candidateCheck(background, original, boxes, index, null) })).filter(l => l.ok);
+      if (!available.length) return false;
+      selected = weighted(available);
+      layer.getContext('2d').drawImage(selected.image, registration.dx, registration.dy, w, h);
+      return true;
     }
     function tuneLayer() {
       const tuning = fit(background, original, layer, null), data = pixels(layer);
@@ -287,7 +314,7 @@
       stopPromise = Promise.all(entries.map(e => e.done)).then(blobs => {
         cleanup();
         const r = { original: blobs[0], composite: edited ? blobs[1] : null, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', durationMs: Math.round(elapsed()), applied,
-          ...(reason ? { reason } : {}), ...(appearance !== undefined ? { ghostAtMs: Math.round(appearance) } : {}),
+          ...(applied && selected ? { layer: selected.file } : {}), ...(reason ? { reason } : {}), ...(appearance !== undefined ? { ghostAtMs: Math.round(appearance) } : {}),
           stats: { width: w, height: h, targetFps: 24, compositeFps: edited ? compositeFps : 0, frames, compositeFrames, droppedFrameRatio: frames + missed ? missed / (frames + missed) : 0, dropMetric: 'render-scheduler-estimate', downgrades, stopReason: finishReason, ...(recordingError ? { error: recordingError } : {}) } };
         if (blobs.some(b => !b.size)) { r.reason = 'empty-recording'; r.applied = false; }
         else if (recordingError) r.reason = 'recording-interrupted: ' + recordingError;
@@ -383,29 +410,19 @@
   }
 
   // One low-resolution image and scalar clear intervals, never a collection of decoded frames.
-  function editAnalysis(asset, width, height, range, duration) {
+  function singleEditAnalysis(asset, width, height, range, duration) {
     if (Math.abs(width / height / (asset.meta.width / asset.meta.height) - 1) > .025) throw Error('aspect-ratio-mismatch');
     const w = 192, h = Math.max(32, Math.round(w * height / width));
     const probe = canvas(w, h), ctx = probe.getContext('2d', { willReadFrequently: true });
-    let registration, background, reference, box, previous, lastAlign = -Infinity, clearStart = null, lastEnd = 0;
-    const runs = [];
+    let registration, background, box, previous, lastAlign = -Infinity, clearStart = null, lastEnd = 0;
+    const runs = []; let lastCheck = { weight: 0 }, runWeight = 0, runFrames = 0;
     function clear(image) {
       ctx.drawImage(image, 0, 0, w, h);
-      const current = ctx.getImageData(0, 0, w, h).data, ratios = [[], [], []];
-      for (let y = 2; y < h - 2; y += 4) for (let x = 2; x < w - 2; x += 4) {
-        if (x >= box[0] - 3 && x <= box[0] + box[2] + 3 && y >= box[1] - 3 && y <= box[1] + box[3] + 3) continue;
-        const i = (y * w + x) * 4;
-        for (let k = 0; k < 3; k++) if (reference[i + k] > 20 && reference[i + k] < 235) ratios[k].push(current[i + k] / reference[i + k]);
-      }
-      const gain = ratios.map(a => clamp(a.length ? median(a) : 1, .65, 1.45));
-      let changed = 0, count = 0;
-      for (let y = Math.max(0, Math.floor(box[1] - 3)); y < Math.min(h, box[1] + box[3] + 3); y++) for (let x = Math.max(0, Math.floor(box[0] - 3)); x < Math.min(w, box[0] + box[2] + 3); x++) {
-        const i = (y * w + x) * 4; count++;
-        if (Math.max(...gain.map((v, k) => Math.abs(current[i + k] - reference[i + k] * v))) > 22) changed++;
-      }
-      return count > 0 && changed / count <= .015;
+      const boxes = asset.allBoxes.map(b => [b[0] * w / asset.meta.width + registration.dx, b[1] * h / asset.meta.height + registration.dy, b[2] * w / asset.meta.width, b[3] * h / asset.meta.height]);
+      lastCheck = candidateCheck(background, probe, boxes, asset.layerIndex, null);
+      return lastCheck.ok;
     }
-    function closeRun() { if (clearStart !== null) runs.push([clearStart, lastEnd]); clearStart = null; }
+    function closeRun() { if (clearStart !== null) runs.push([clearStart, lastEnd, runWeight / Math.max(1, runFrames)]); clearStart = null; runWeight = 0; runFrames = 0; }
     return {
       async inspect(image, time, end) {
         ctx.drawImage(image, 0, 0, w, h);
@@ -421,27 +438,28 @@
         }
         previous = current;
         if (time - lastAlign >= .5 || !registration || (edges > 30 && changedEdges / edges > .3)) {
-          const r = await align(asset.background, probe, asset.meta.bbox, null); lastAlign = time;
+          const shared = asset.analysisShared;
+          const r = shared.time === time ? shared.result : await align(asset.background, probe, asset.allBoxes, null);
+          shared.time = time; shared.result = r; lastAlign = time;
           if (r.boundary || r.score > 18 || (registration && (Math.abs(r.dx - registration.dx) > 1 || Math.abs(r.dy - registration.dy) > 1))) throw Error('camera-moved');
           if (!registration) {
             registration = r; background = canvas(w, h);
             background.getContext('2d').drawImage(asset.background, r.dx, r.dy, w, h);
-            reference = pixels(background).data;
             const b = asset.meta.bbox;
             box = [b[0] * w / asset.meta.width + r.dx, b[1] * h / asset.meta.height + r.dy, b[2] * w / asset.meta.width, b[3] * h / asset.meta.height];
-            if (box[0] < 0 || box[1] < 0 || box[0] + box[2] > w || box[1] + box[3] > h) throw Error('ghost-out-of-frame');
+
           }
         }
         if (time > lastEnd + .15) closeRun();
-        if (clear(image)) { if (clearStart === null) clearStart = time; } else closeRun();
+        if (clear(image)) { if (clearStart === null) clearStart = time; runWeight += lastCheck.weight; runFrames++; } else closeRun();
         lastEnd = end;
       },
       choose() {
         closeRun();
-        const candidates = runs.map(([a, b]) => [Math.max(a, range[0]), Math.min(b - duration, range[1])]).filter(([a, b]) => b >= a);
+        const candidates = runs.map(([a, b, weight]) => ({ a: Math.max(a, range[0]), b: Math.min(b - duration, range[1]), weight })).filter(c => c.b >= c.a);
         if (!candidates.length) throw Error('ghost-space-never-clear');
-        const c = candidates[Math.floor(Math.random() * candidates.length)];
-        return c[0] + Math.random() * (c[1] - c[0]);
+        const c = weighted(candidates);
+        return { at: c.a + Math.random() * (c.b - c.a), weight: c.weight };
       },
       clear,
       layer(image, outWidth, outHeight) {
@@ -461,20 +479,46 @@
       }
     };
   }
+  function editAnalysis(asset, width, height, range, duration) {
+    const analysisShared = {};
+    const analyses = asset.layers.map((l, i) => ({
+      file: l.file,
+      analysis: singleEditAnalysis({ ...asset, ghost: l.image, meta: { ...asset.meta, bbox: l.bbox }, allBoxes: asset.layers.map(l => l.bbox), layerIndex: i, analysisShared }, width, height, range, duration)
+    }));
+    let selected;
+    return {
+      async inspect(image, time, end) { for (const entry of analyses) await entry.analysis.inspect(image, time, end); },
+      choose() {
+        const candidates = [];
+        for (const entry of analyses) {
+          try { candidates.push({ ...entry, ...entry.analysis.choose() }); }
+          catch (e) { if (e.message !== 'ghost-space-never-clear') throw e; }
+        }
+        if (!candidates.length) throw Error('no-dark-candidate');
+        selected = weighted(candidates); return selected.at;
+      },
+      get file() { return selected && selected.file; },
+      clear(image) { return selected.analysis.clear(image); },
+      layer(image, w, h) { return selected.analysis.layer(image, w, h); }
+    };
+  }
   function editPainter(analysis, w, h, at, duration) {
-    const surface = canvas(w, h), ctx = surface.getContext('2d'); let layer, frames = 0;
-    return { surface, get frames() { return frames; }, paint(image, time) {
+    const surface = canvas(w, h), ctx = surface.getContext('2d'); let layer, frames = 0, retired = false, misses = 0;
+    return { surface, get frames() { return frames; }, get endedEarly() { return retired; }, paint(image, time) {
       ctx.drawImage(image, 0, 0, w, h);
       const age = time - at;
-      if (age >= 0 && age < duration) {
-        if (!analysis.clear(image)) throw Error('ghost-space-occupied');
+      if (!retired && age >= 0 && age < duration) {
+        // 한두 장면의 순간적인 흔들림(디코딩·노출)으로는 퇴장하지 않는다. 연속 3장면 이상 가려지거나 빛이 닿으면 퇴장
+        if (!analysis.clear(image)) { if (++misses >= 3) { retired = true; return; } } else misses = 0;
+        const opacity = clamp(Math.min(age / .12, (duration - age) / .16), 0, 1);
+        if (!opacity) return;
         if (!layer) layer = analysis.layer(surface, w, h);
-        ctx.save(); ctx.globalAlpha = clamp(Math.min(age / .12, (duration - age) / .16), 0, 1);
+        ctx.save(); ctx.globalAlpha = opacity;
         ctx.drawImage(layer, 0, 0); ctx.restore(); frames++;
       }
     } };
   }
-  const editSemanticError = e => /^(camera-moved|aspect-ratio-mismatch|ghost-out-of-frame|ghost-space-|invalid-|video-too-|no-video)/.test(e.message);
+  const editSemanticError = e => /^(camera-moved|aspect-ratio-mismatch|ghost-out-of-frame|ghost-space-|no-dark-candidate|invalid-|video-too-|no-video)/.test(e.message);
 
   async function editFast(blob, asset, options, progress) {
     const M = await loadEditLibrary(), input = new M.Input({ source: new M.BlobSource(blob), formats: M.ALL_FORMATS });
@@ -524,8 +568,8 @@
       if (!painter.frames) throw Error('ghost-space-not-rendered');
       await output.finalize();
       const mime = mp4 ? 'video/mp4' : 'video/webm';
-      return { blob: new Blob([target.buffer], { type: mime }), mime, ext: mp4 ? 'mp4' : 'webm', applied: true, ghostAtMs: Math.round((at - start) * 1000),
-        stats: { width: w, height: h, durationMs: Math.round(length * 1000), frames, scanned, compositeFrames: painter.frames, audioTracks: audio.length, audioPackets, audio: 'packet-copy', bitrate, reencodedVideo: true, alignmentIntervalMs: 500 } };
+      return { blob: new Blob([target.buffer], { type: mime }), mime, ext: mp4 ? 'mp4' : 'webm', applied: true, layer: analysis.file, ghostAtMs: Math.round((at - start) * 1000),
+        stats: { width: w, height: h, durationMs: Math.round(length * 1000), frames, scanned, compositeFrames: painter.frames, ghostEndedEarly: painter.endedEarly, audioTracks: audio.length, audioPackets, audio: 'packet-copy', bitrate, reencodedVideo: true, alignmentIntervalMs: 500 } };
     } catch (e) { if (output) { try { await output.cancel(); } catch (_) {} } throw e; }
     finally { input.dispose(); }
   }
@@ -593,8 +637,8 @@
         try { await video.play(); tick(); } catch (e) { failure = e; stop(); }
         const result = await done;
         if (!result.size || !painter.frames) throw Error('ghost-space-not-rendered');
-        return { blob: result, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', applied: true, ghostAtMs: Math.round(at * 1000),
-          stats: { width: w, height: h, durationMs: Math.round(length * 1000), compositeFrames: painter.frames, audioTracks: audio.length, audio: 'capture-stream-reencoded', scanIntervalMs: 100, alignmentIntervalMs: 500 } };
+        return { blob: result, mime: support.mime, ext: support.mime === 'video/mp4' ? 'mp4' : 'webm', applied: true, layer: analysis.file, ghostAtMs: Math.round(at * 1000),
+          stats: { width: w, height: h, durationMs: Math.round(length * 1000), compositeFrames: painter.frames, ghostEndedEarly: painter.endedEarly, audioTracks: audio.length, audio: 'capture-stream-reencoded', scanIntervalMs: 100, alignmentIntervalMs: 500 } };
       } finally { clearTimeout(watchdog); document.removeEventListener('visibilitychange', interrupted); }
     } finally {
       clearTimeout(timer); if (frameId !== undefined) video.cancelVideoFrameCallback(frameId);
