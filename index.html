@@ -51,6 +51,17 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 /* camera */
 #scrCamera{background:#000;position:fixed;inset:0;min-height:0;z-index:20}
 #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+#camVideo.mirror{transform:scaleX(-1)}
+/* 화면 조명: 앞면 카메라일 때 미리보기 둘레를 하얗게 밝혀 얼굴을 비춘다 */
+#scrCamera.lit{background:#fff}
+#scrCamera.lit #camVideo{inset:9vh 12vw;width:auto;height:auto;border-radius:14px}
+#scrCamera.lit .cam-top,#scrCamera.lit .cam-hint{color:#222;text-shadow:none;background:none}
+#scrCamera.lit .cam-bar{background:none}
+#scrCamera.lit .shutter{border-color:#2a1d4a;background:rgba(42,29,74,.15)}
+#scrCamera.lit .btn.ghost{color:#2a1d4a;border-color:#2a1d4a}
+#scrCamera.lit #camTimerLabel{color:#2a1d4a!important}
+#scrCamera.lit .countdown{color:#2a1d4a;text-shadow:0 4px 20px rgba(255,255,255,.9)}
+.cam-hint{position:absolute;left:0;right:0;top:44px;text-align:center;color:#ffe9b8;font-weight:800;font-size:18px;text-shadow:0 2px 6px #000;pointer-events:none}
 .cam-bar{position:absolute;left:0;right:0;bottom:0;padding:18px calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom));
   display:flex;align-items:center;justify-content:space-between;background:linear-gradient(0deg,rgba(0,0,0,.7),transparent)}
 .cam-top{position:absolute;left:0;right:0;top:0;padding:14px 18px;color:#fff;font-weight:800;font-size:18px;text-shadow:0 2px 6px #000;
@@ -228,6 +239,7 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
 <section class="screen" id="scrCamera" hidden>
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="cam-top" id="camTop"></div>
+  <div class="cam-hint" id="camHint" hidden>🔦 찍을 때는 손전등을 바닥으로!</div>
   <div class="countdown" id="camCount"></div>
   <div class="flash" id="camFlash"></div>
   <div class="rec-badge" id="camRec" hidden><i></i><span id="camRecTime">0.0</span></div>
@@ -362,6 +374,13 @@ table.t th,table.t td{padding:7px 8px;border-bottom:1px solid #2e3240;text-align
         <h3>귀신 합성 시험</h3>
         <p>이 장소의 귀신을 무조건 넣어서 한 장 찍어 봅니다. 사진함에 저장되지 않습니다.</p>
         <button class="btn sm" id="btnTestShot">👻 시험 촬영</button>
+      </div>
+      <div class="panel">
+        <h3>카메라 (이 태블릿)</h3>
+        <p>빈 배경을 찍을 때와 행사 때 <b>같은 카메라·같은 조명</b>이어야 수정이 잘 됩니다.</p>
+        <label class="row" style="gap:6px;margin-bottom:6px"><input type="radio" name="camFacing" value="user" style="width:auto"> 앞면 카메라 (화면 쪽, 학생이 자기 모습을 보며 찍음)</label>
+        <label class="row" style="gap:6px;margin-bottom:10px"><input type="radio" name="camFacing" value="environment" style="width:auto"> 뒷면 카메라</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="chkScreenLight" style="width:auto"> 화면 조명 (앞면 카메라일 때 화면 둘레를 하얗게 밝혀 얼굴을 비춤 · 태블릿 밝기 최대 권장)</label>
       </div>
       <div class="panel">
         <h3>조 번호 초기화 (리허설 뒤)</h3>

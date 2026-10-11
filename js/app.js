@@ -398,8 +398,13 @@
 
   // ---------- 카메라 ----------
   const STUDENT_MODES = ['student', 'video', 'scan', 'burst'];
+  // 이 태블릿의 카메라: 앞면(user, 기본) / 뒷면(environment). 앞면은 미리보기만 거울처럼 보여 주고 저장은 정상 방향
+  const camFacing = () => (conf.facing === 'environment' ? 'environment' : 'user');
   async function openCamera(mode) {
     camMode = mode;
+    $('camVideo').classList.toggle('mirror', camFacing() === 'user');
+    $('scrCamera').classList.toggle('lit', camFacing() === 'user' && !!conf.screenLight);
+    $('camHint').hidden = !STUDENT_MODES.includes(mode);
     const s = station();
     $('camTop').textContent = mode === 'background' ? '빈 배경 촬영 — 사람이 없게 해 주세요'
       : mode === 'test' ? '귀신 합성 시험 촬영'
@@ -415,8 +420,8 @@
       stream = await navigator.mediaDevices.getUserMedia({
         audio: mode === 'video',
         video: mode === 'video'
-          ? { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          ? { facingMode: { ideal: camFacing() }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { facingMode: { ideal: camFacing() }, width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
       const v = $('camVideo'); v.srcObject = stream; await v.play();
     } catch (e) {
@@ -853,7 +858,7 @@
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
-    if (name === 'tools') renderDiag();
+    if (name === 'tools') { renderDiag(); renderCamSettings(); }
     if (name === 'level') renderIntensity();
   }
 
@@ -985,6 +990,10 @@
     await db.clear(); renderGallery(); toast('이 태블릿의 사진을 모두 지웠어요');
   }
 
+  function renderCamSettings() {
+    document.querySelectorAll('input[name="camFacing"]').forEach((r) => { r.checked = r.value === camFacing(); });
+    $('chkScreenLight').checked = !!conf.screenLight;
+  }
   function renderDiag() {
     const es = window.GhostEngine && GhostEngine.status ? GhostEngine.status() : null;
     $('diag').innerHTML = [
@@ -1026,6 +1035,8 @@
     $('btnYoungNo').onclick = () => answerYoung(false);
     document.querySelectorAll('[data-fear]').forEach((b) => { b.onclick = () => finishTeam(false, Number(b.dataset.fear)); });
     $('btnResetTeams').onclick = resetTeams;
+    document.querySelectorAll('input[name="camFacing"]').forEach((r) => { r.onchange = () => { conf.facing = r.value; writeLS(LS_CONF, conf); toast(r.value === 'user' ? '앞면 카메라로 찍어요' : '뒷면 카메라로 찍어요'); }; });
+    $('chkScreenLight').onchange = (e) => { conf.screenLight = e.target.checked; writeLS(LS_CONF, conf); };
     $('btnOpenCam').onclick = startStudentCamera;
     $('btnShutter').onclick = shoot;
     $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };
