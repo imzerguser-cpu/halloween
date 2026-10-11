@@ -80,7 +80,7 @@
     <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>
   </div>
   <div class="int-row"><span>나레이션 목소리</span>
-    ${[['태블릿', '태블릿 음성 (Web Speech · 무료·바로 됨)'], ['Google', 'Google Cloud TTS (자연스러움)'], ['Azure', 'MS Azure Neural TTS (자연스러움)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-voice" value="${v}"${get(st, '나레이션방식') === v ? ' checked' : ''}> ${t}</label>`).join('')}
+    ${[['태블릿', '태블릿 음성 (Web Speech · 무료·바로 됨)'], ['ElevenLabs', 'ElevenLabs (무료 요금제 · 감정 표현)'], ['Google', 'Google Cloud TTS (자연스러움)'], ['Azure', 'MS Azure Neural TTS (자연스러움)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-voice" value="${v}"${get(st, '나레이션방식') === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
   ${['Google', 'Azure'].map((prov) => `<div class="int-voices" data-prov="${prov}"${get(st, '나레이션방식') === prov ? '' : ' hidden'}>
     <table class="int-t"><tr><th>${prov} 단계별 목소리</th><th>목소리 (남성·여성)</th></tr>
@@ -88,6 +88,12 @@
       const opts = VOICES[prov].some(([v]) => v === cur) ? VOICES[prov] : VOICES[prov].concat([[cur, cur + ' (직접 입력한 값)']]);
       return `<tr><td>${l.label}</td><td><select data-k="${k}">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></td></tr>`; }).join('')}
     </table></div>`).join('')}
+  <div class="int-voices" data-prov="ElevenLabs"${get(st, '나레이션방식') === 'ElevenLabs' ? '' : ' hidden'}>
+    <table class="int-t"><tr><th>ElevenLabs 단계별 목소리</th><th>Voice ID (목록에서 고르거나 Voice Library 의 ID 붙여넣기)</th></tr>
+    ${LEVELS.map((l, i) => `<tr><td>${l.label}</td><td><input list="int-el-voices" data-k="나레이션목소리_${l.key}" value="${esc(get(st, '나레이션목소리_' + l.key) || ['21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL', 'pNInz6obpgDQGcFmaJgB'][i])}" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:14px"></td></tr>`).join('')}
+    </table>
+    <datalist id="int-el-voices"><option value="21m00Tcm4TlvDq8ikWAM">Rachel · 여성 차분</option><option value="EXAVITQu4vr4xnSDxMaL">Sarah · 여성 부드러움</option><option value="pNInz6obpgDQGcFmaJgB">Adam · 남성 낮음</option><option value="ErXwobaYiN019PkySvjV">Antoni · 남성</option></datalist>
+  </div>
   <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
@@ -120,7 +126,7 @@
         el.querySelectorAll('select[data-k]').forEach((s) => { o[s.dataset.k] = s.value; });
         el.querySelectorAll('input[type=checkbox][data-k]').forEach((c) => { o[c.dataset.k] = c.checked ? '예' : '아니오'; });
         el.querySelectorAll('input[type=range][data-k]').forEach((r) => { o[r.dataset.k] = String(r.value); });
-        el.querySelectorAll('input[type=text][data-k]').forEach((t) => { o[t.dataset.k] = t.value.trim() || DEF[t.dataset.k] || ''; });
+        el.querySelectorAll('input[type=text][data-k], input[list][data-k]').forEach((t) => { o[t.dataset.k] = t.value.trim() || DEF[t.dataset.k] || ''; });
         const rv = el.querySelector('input[name="int-reveal"]:checked'); if (rv) o['공개방식'] = rv.value;
         const pk = el.querySelector('input[name="int-pick"]:checked'); if (pk) o['조선정'] = pk.value;
         const vc = el.querySelector('input[name="int-voice"]:checked'); if (vc) o['나레이션방식'] = vc.value;
