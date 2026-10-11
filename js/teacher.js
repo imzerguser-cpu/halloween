@@ -9,6 +9,8 @@
   const LS = 'hg_teacher';
   let conf = {};
   try { conf = JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) {}
+  // 구글 시트 웹 앱 주소는 미리 넣어 둔다 (비밀 키가 있어야만 내용을 볼 수 있다)
+  if (!conf.apiUrl) conf.apiUrl = 'https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec';
   let roster = null;            // { groups:[{group, size, young, time}], stations, settings }
   let rows = [];                // 기록 탭 줄 (row 번호 = 배열 위치)
   let cursor = 0;

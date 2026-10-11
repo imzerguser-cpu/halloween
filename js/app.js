@@ -9,7 +9,10 @@
   const LS_CACHE = 'hg_cache';  // { stations, settings, fetchedAt }  ※ 이름 없음
   const DEFAULT_PIN = '1031';
 
+  // 구글 시트 웹 앱 주소는 미리 넣어 둔다 (주소만으로는 아무것도 볼 수 없고, 비밀 키가 있어야 한다)
+  const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec';
   let conf = readLS(LS_CONF) || {};
+  if (!conf.apiUrl) conf.apiUrl = DEFAULT_API_URL;
   let cache = readLS(LS_CACHE) || { stations: [], settings: {} };
   let asset = null;             // 이 장소의 귀신 소재
   let assetState = '확인 전';
