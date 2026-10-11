@@ -804,23 +804,27 @@
     if (tapCount >= 5) { tapCount = 0; openPin(); }
   });
 
+  // 교사 모드 비밀번호: 숫자 4~8자리 (강도 설정 화면에서 바꿈). 맞으면 바로 열리고, 틀리면 ✓ 를 눌렀을 때 알려 준다
   let pinBuf = '';
+  const adminPin = () => String(setting('관리자PIN', DEFAULT_PIN)).replace(/\D/g, '') || DEFAULT_PIN;
   function openPin() { pinBuf = ''; drawPin(); show('scrPin'); }
   function drawPin() {
-    [...$('pinDots').children].forEach((d, i) => d.classList.toggle('f', i < pinBuf.length));
+    $('pinDots').innerHTML = Array.from({ length: Math.max(4, pinBuf.length) }, (_, i) => `<i class="${i < pinBuf.length ? 'f' : ''}"></i>`).join('');
+  }
+  function checkPin(final) {
+    if (pinBuf === adminPin()) { pinBuf = ''; return openAdmin('conn'); }
+    if (final || pinBuf.length >= 8) { toast('비밀번호가 틀렸어요'); pinBuf = ''; setTimeout(drawPin, 150); }
   }
   function buildPinPad() {
     const pad = $('pinPad');
-    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].forEach((k) => {
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', '✓'].forEach((k) => {
       const b = document.createElement('button'); b.textContent = k;
-      if (!k) b.style.visibility = 'hidden';
+      if (k === '✓') b.className = 'pin-ok';
       b.onclick = () => {
-        if (k === '⌫') pinBuf = pinBuf.slice(0, -1); else if (pinBuf.length < 4) pinBuf += k;
-        drawPin();
-        if (pinBuf.length === 4) {
-          if (pinBuf === String(setting('관리자PIN', DEFAULT_PIN))) openAdmin('conn');
-          else { toast('비밀번호가 틀렸어요'); pinBuf = ''; setTimeout(drawPin, 150); }
-        }
+        if (k === '⌫') { pinBuf = pinBuf.slice(0, -1); return drawPin(); }
+        if (k === '✓') return checkPin(true);
+        if (pinBuf.length < 8) pinBuf += k;
+        drawPin(); checkPin(false);
       };
       pad.appendChild(b);
     });

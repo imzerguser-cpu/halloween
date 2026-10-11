@@ -65,6 +65,11 @@
     <label class="int-chk"><input type="checkbox" data-k="저학년질문"${yes(get(st, '저학년질문')) ? ' checked' : ''}> 1·2학년 동생 있나요?</label>
     <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
   </div>
+  <div class="int-row int-pin"><span>교사 모드 비밀번호</span>
+    <input type="password" inputmode="numeric" maxlength="8" placeholder="새 비밀번호 (숫자 4~8자리)" class="int-pin1" autocomplete="new-password">
+    <input type="password" inputmode="numeric" maxlength="8" placeholder="한 번 더" class="int-pin2" autocomplete="new-password">
+    <button type="button" class="int-pinsave">비밀번호 바꾸기</button>
+  </div>
   <div class="int-row">
     <button type="button" class="int-save">💾 저장 (모든 태블릿에 적용)</button>
     <button type="button" class="int-shuffle">🔀 귀신 장소 다시 섞기</button>
@@ -98,6 +103,13 @@
         catch (e) { msg('저장 실패: ' + e.message, false); }
       };
       el.querySelector('.int-save').onclick = () => save(collect());
+      el.querySelector('.int-pinsave').onclick = () => {
+        const a = el.querySelector('.int-pin1').value.trim(), b = el.querySelector('.int-pin2').value.trim();
+        if (!/^\d{4,8}$/.test(a)) return msg('비밀번호는 숫자 4~8자리로 해 주세요', false);
+        if (a !== b) return msg('두 칸의 비밀번호가 달라요', false);
+        el.querySelector('.int-pin1').value = ''; el.querySelector('.int-pin2').value = '';
+        save({ '관리자PIN': a }, '교사 모드 비밀번호를 바꿨어요. 모든 태블릿에 1분 안에 적용돼요.');
+      };
       let armed = 0;
       el.querySelector('.int-shuffle').onclick = () => {
         if (Date.now() - armed > 4000) { armed = Date.now(); return msg('이미 출발한 조의 귀신 장소도 바뀌어요. 4초 안에 한 번 더 누르세요.'); }
@@ -113,6 +125,7 @@
 .int-t th{color:#a9aec0;font-weight:700}.int select{padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px;width:auto}
 .int-chk{display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:14px;color:#e8eaf0;cursor:pointer}.int-chk input{width:auto}
 .int-help{font-size:13px;color:#a9aec0;margin:6px 0 12px}.int-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.int-row>span:first-child{font-size:14px;color:#a9aec0;min-width:150px}
+.int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}
 .int .int-play,.int .int-shuffle{background:#252935;color:#e8eaf0}.int-msg{font-size:13px}`;
