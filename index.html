@@ -593,7 +593,19 @@ button{touch-action:manipulation}
       <div class="panel">
         <h3>나레이션 목소리 (이 태블릿)</h3>
         <p>이야기를 읽어 줄 목소리를 고르세요. 태블릿에 깔린 한국어 음성(구글·삼성)만 보입니다. 더 자연스러운 목소리가 필요하면 태블릿 <b>설정 → 일반 → 텍스트 음성 변환</b>에서 음성 데이터를 받으세요.</p>
-        <label class="field"><span>목소리</span><select id="selVoice"></select></label>
+        <div class="row" style="margin-bottom:10px">
+          <a class="btn sm" href="https://play.google.com/store/apps/details?id=com.google.android.tts" target="_blank" rel="noopener">📥 Google 음성 엔진 받기·업데이트</a>
+          <a class="btn sm ghost" href="intent:#Intent;action=android.speech.tts.engine.INSTALL_TTS_DATA;package=com.google.android.tts;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.google.android.tts;end">⚙ 음성 데이터 설치 화면 열기</a>
+          <button class="btn sm ghost" id="btnVoiceRefresh">🔄 목소리 목록 새로고침</button>
+        </div>
+        <ol class="help" style="margin:0 0 12px 18px">
+          <li>"Google 음성 엔진 받기"로 <b>Google 음성 서비스</b>를 설치·업데이트합니다.</li>
+          <li>"음성 데이터 설치 화면 열기"(안 열리면 태블릿 <b>설정 → 일반 → 텍스트 음성 변환 → 기본 엔진 Google → ⚙ → 음성 데이터 설치</b>)에서 <b>한국어</b>를 받습니다. 목소리 고르기 화면에서 남성 목소리도 받아 두세요.</li>
+          <li>이 화면으로 돌아와 "목록 새로고침" → 아래에서 단계별 목소리를 고르고 🔊 미리 듣기.</li>
+        </ol>
+        <label class="field"><span>😱 너무 무서워요 · 1·2학년 목소리</span><select id="selVoice" data-lv="0"></select></label>
+        <label class="field"><span>😬 조금 무서워요 목소리</span><select class="sel-voice-lv" data-lv="1"></select></label>
+        <label class="field"><span>😎 하나도 안 무서워요 목소리</span><select class="sel-voice-lv" data-lv="2"></select></label>
         <div class="row"><select id="selVoiceLevel" style="width:auto;padding:9px 10px;border-radius:9px;background:#0f1116;color:#fff;border:1px solid #3a3f50"><option value="0">😱 너무 무서워요 말투</option><option value="1" selected>😬 조금 무서워요 말투</option><option value="2">😎 하나도 안 무서워요 말투</option></select>
         <button class="btn sm" id="btnVoiceTest">🔊 미리 듣기</button>
         <button class="btn sm ghost" id="btnVoicePrefetch" hidden>⬇ 이 장소 나레이션 미리 만들기</button></div>

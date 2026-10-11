@@ -14,6 +14,8 @@
     '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
+    '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
+    '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿'
   };
   function get(st, k) {
@@ -25,6 +27,15 @@
     if (k === '큰소리_안무서움' && st['큰소리']) return String(st['큰소리']);
     return DEF[k];
   }
+  // 고를 수 있는 목소리 (이름, 설명)
+  const VOICES = {
+    Google: [['ko-KR-Neural2-A', '여성 A'], ['ko-KR-Neural2-B', '여성 B'], ['ko-KR-Neural2-C', '남성 (Neural2-C)'],
+      ['ko-KR-Wavenet-A', '여성 (Wavenet-A)'], ['ko-KR-Wavenet-C', '남성 (Wavenet-C)'], ['ko-KR-Wavenet-D', '남성 (Wavenet-D)'],
+      ['ko-KR-Standard-C', '남성 (Standard-C)'], ['ko-KR-Standard-D', '남성 (Standard-D)']],
+    Azure: [['ko-KR-SunHiNeural', '여성 선히'], ['ko-KR-JiMinNeural', '여성 지민'], ['ko-KR-YuJinNeural', '여성 유진'], ['ko-KR-SeoHyeonNeural', '여자아이 서현'],
+      ['ko-KR-SoonBokNeural', '할머니 순복'], ['ko-KR-InJoonNeural', '남성 인준'], ['ko-KR-HyunsuNeural', '남성 현수'],
+      ['ko-KR-BongJinNeural', '남성 봉진'], ['ko-KR-GookMinNeural', '남성 국민']]
+  };
   const lv = (fear) => LEVELS[fear == null || fear < 0 || fear > 2 ? 1 : fear].key;
   const yes = (v) => String(v).trim() === '예';
   const num = (v, d, lo, hi) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
@@ -71,6 +82,13 @@
   <div class="int-row"><span>나레이션 목소리</span>
     ${[['태블릿', '태블릿 음성 (Web Speech · 무료·바로 됨)'], ['Google', 'Google Cloud TTS (자연스러움)'], ['Azure', 'MS Azure Neural TTS (자연스러움)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-voice" value="${v}"${get(st, '나레이션방식') === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
+  ${['Google', 'Azure'].map((prov) => `<div class="int-voices" data-prov="${prov}"${get(st, '나레이션방식') === prov ? '' : ' hidden'}>
+    <table class="int-t"><tr><th>${prov} 단계별 목소리</th><th>목소리 (남성·여성)</th></tr>
+    ${LEVELS.map((l) => { const k = (prov === 'Google' ? '구글목소리_' : '애저목소리_') + l.key, cur = get(st, k);
+      const opts = VOICES[prov].some(([v]) => v === cur) ? VOICES[prov] : VOICES[prov].concat([[cur, cur + ' (직접 입력한 값)']]);
+      return `<tr><td>${l.label}</td><td><select data-k="${k}">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></td></tr>`; }).join('')}
+    </table></div>`).join('')}
+  <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
     <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">
@@ -114,6 +132,7 @@
         try { await onSave(o); msg(label || '저장했어요. 태블릿에는 1분 안에 적용돼요.', true); }
         catch (e) { msg('저장 실패: ' + e.message, false); }
       };
+      el.querySelectorAll('input[name="int-voice"]').forEach((r) => { r.onchange = () => { el.querySelectorAll('.int-voices').forEach((d) => { d.hidden = d.dataset.prov !== r.value; }); }; });
       el.querySelector('.int-save').onclick = () => save(collect());
       el.querySelector('.int-pinsave').onclick = () => {
         const a = el.querySelector('.int-pin1').value.trim(), b = el.querySelector('.int-pin2').value.trim();

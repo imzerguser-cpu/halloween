@@ -406,9 +406,10 @@
   // 나레이션: 태블릿의 한국어 음성(구글·삼성 TTS)으로 읽는다. 무서움 단계별 말투(속도·높이)
   const narrationOn = () => setting('나레이션', '예') !== '아니오';
   function koVoices() { return ('speechSynthesis' in window ? speechSynthesis.getVoices() : []).filter((v) => /^ko/i.test(v.lang)); }
-  function pickVoice() {
-    const vs = koVoices();
-    return vs.find((v) => v.name === conf.voice) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
+  // 단계별 목소리(태블릿마다 저장): conf.voices[0..2]. 없으면 conf.voice → 자동 선택
+  function pickVoice(lv) {
+    const vs = koVoices(), want = (conf.voices && conf.voices[lv == null ? 1 : lv]) || conf.voice;
+    return vs.find((v) => v.name === want) || vs.find((v) => /natural|neural|wavenet|online/i.test(v.name)) || vs.find((v) => /google/i.test(v.name)) || vs[0] || null;
   }
   // 외부 AI 목소리: 시트 스크립트가 만들어 준 mp3 를 태블릿에도 저장(IndexedDB)해 두고 재생. 실패하면 태블릿 음성
   const TTS_VOICE_KEY = { 'Google': '구글목소리_', 'Azure': '애저목소리_', '클로바': '클로바목소리_', 'ElevenLabs': '나레이션목소리_' };
@@ -470,7 +471,7 @@
     if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text.replace(/[「」📜😊]/g, ''));
     u.lang = 'ko-KR';
-    const v = pickVoice(); if (v) u.voice = v;
+    const v = pickVoice(lv0); if (v) u.voice = v;
     const lv = opts && opts.level != null ? opts.level : storyLevel();
     const base = parseFloat(setting('나레이션속도', '0.95')) || 0.95;
     u.rate = Math.max(0.5, Math.min(1.5, base * [1.05, 0.95, 0.85][lv]));
@@ -485,10 +486,13 @@
   }
   if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { if (!$('scrAdmin').hidden) renderVoices(); };
   function renderVoices() {
-    const sel = $('selVoice'); if (!sel) return;
-    const vs = koVoices(), cur0 = pickVoice();
-    sel.innerHTML = vs.length ? vs.map((v) => '<option value="' + esc(v.name) + '"' + (cur0 && v.name === cur0.name ? ' selected' : '') + '>' + esc(v.name) + (v.localService ? '' : ' (온라인)') + '</option>').join('')
-      : '<option value="">이 기기에 한국어 음성이 없어요</option>';
+    const vs = koVoices();
+    $('btnVoiceRefresh').onclick = () => { if ('speechSynthesis' in window) speechSynthesis.getVoices(); renderVoices(); toast(`한국어 목소리 ${koVoices().length}개를 찾았어요`); };
+    document.querySelectorAll('#selVoice, .sel-voice-lv').forEach((sel) => {
+      const lv = Number(sel.dataset.lv), cur0 = pickVoice(lv);
+      sel.innerHTML = vs.length ? vs.map((v) => '<option value="' + esc(v.name) + '"' + (cur0 && v.name === cur0.name ? ' selected' : '') + '>' + esc(v.name) + (v.localService ? '' : ' (온라인)') + '</option>').join('')
+        : '<option value="">이 기기에 한국어 음성이 없어요</option>';
+    });
   }
 
   // ---------- 괴담 (무서움 단계별 문구) ----------
@@ -1188,7 +1192,9 @@
     $('btnTeamGo').onclick = () => openMission();
     $('btnStoryNext').onclick = nextStory;
     $('btnStoryReplay').onclick = () => narrate(storyPages[storyIdx] && storyPages[storyIdx].text);
-    $('selVoice').onchange = (e) => { conf.voice = e.target.value; writeLS(LS_CONF, conf); };
+    document.querySelectorAll('#selVoice, .sel-voice-lv').forEach((sel) => {
+      sel.onchange = () => { conf.voices = conf.voices || []; conf.voices[Number(sel.dataset.lv)] = sel.value; writeLS(LS_CONF, conf); };
+    });
     $('btnVoiceTest').onclick = async () => {
       const lv = Number($('selVoiceLevel').value); ttsError = '';
       await narrate(prologueText(lv), { level: lv });
