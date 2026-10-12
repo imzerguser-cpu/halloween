@@ -449,7 +449,7 @@
     if (!ttsProvider() || !station()) return;
     const s = station(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
     for (let lv = 0; lv < 3; lv++) {
-      const txt = ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
+      const txt = ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
       if (txt) await ttsClip(cleanSpeech(txt), lv).catch(() => {});
       if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
     }
@@ -507,7 +507,7 @@
     const lv = storyLevel(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
     const title = (s.storyTitle || '').trim() || (def ? def.title : '');
     const custom = s.stories && s.stories[lv];
-    const text = (custom || '').trim() || (def ? def.text[lv] : '');
+    const text = (custom || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
     return text ? { title, text } : null;
   }
 
@@ -1031,7 +1031,7 @@
         const s = station();
         const text = which === 'station' && s ? (function () {
           const def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
-          return ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
+          return ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
         })() : prologueText(lv);
         if (!text) return { error: '이 장소에는 괴담 문구가 없어요' };
         const how = o['나레이션방식'] || setting('나레이션방식', '태블릿');

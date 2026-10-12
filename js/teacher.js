@@ -83,7 +83,7 @@
         const first = roster.stations[0];
         const def = (window.HG_STORIES && first && HG_STORIES.byType[(first.type || '').trim()]) || null;
         const text = which === 'station'
-          ? (((first && first.stories && first.stories[lv]) || '').trim() || (def ? def.text[lv] : ''))
+          ? (((first && first.stories && first.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, first.name) : ''))
           : ((roster.settings['프롤로그_' + LV[lv]] || '').trim() || (window.HG_STORIES ? HG_STORIES.prologue[lv] : ''));
         if (!text) return { error: '읽을 문구가 없어요' };
         const how = o['나레이션방식'] || roster.settings['나레이션방식'] || '태블릿';

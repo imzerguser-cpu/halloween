@@ -19,7 +19,7 @@
         const stories = s.stories || ['', '', ''];
         return `<details class="se-st"><summary>${esc(s.name)} <small>${esc(s.storyTitle || def.title || '')}</small></summary>
           <label class="se-lv">괴담 제목<input data-key="t:${esc(s.id)}" value="${esc(s.storyTitle || '')}" placeholder="${esc('비우면 기본: ' + (def.title || ''))}"></label>
-          ${LV.map(([, label], i) => `<label class="se-lv">${label}${ta('s:' + s.id + ':' + i, stories[i] || '', '비우면 기본: ' + (def.text[i] || ''))}</label>`).join('')}
+          ${LV.map(([, label], i) => `<label class="se-lv">${label}${ta('s:' + s.id + ':' + i, stories[i] || '', '비우면 기본: ' + (def.text[i] || '').replace(/\{장소\}/g, s.name))}</label>`).join('')}
         </details>`;
       }).join('');
       el.innerHTML = `<div class="se">
