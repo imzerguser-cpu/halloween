@@ -1026,6 +1026,21 @@
     if (!window.Intensity) return;
     Intensity.render($('intensityPanel'), cache.settings, {
       stationCount: ghostStations().length,
+      onStop: stopNarration,
+      onPreview: async (o, lv, which) => {
+        const s = station();
+        const text = which === 'station' && s ? (function () {
+          const def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
+          return ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
+        })() : prologueText(lv);
+        if (!text) return { error: '이 장소에는 괴담 문구가 없어요' };
+        const how = o['나레이션방식'] || setting('나레이션방식', '태블릿');
+        const saved = cache.settings; cache.settings = Object.assign({}, saved, { '나레이션방식': how, '나레이션': '예' });
+        ttsError = '';
+        try { await narrate(text, { level: lv }); } finally { cache.settings = saved; }
+        if (ttsError && how !== '태블릿') return { error: how + ' 실패 → 태블릿 음성으로 읽었어요: ' + ttsError };
+        return { how: how === '태블릿' ? '태블릿 음성' : how };
+      },
       onSave: async (o) => {
         if (!conf.apiUrl || !conf.apiKey) throw new Error('먼저 구글 시트를 연결하세요');
         const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },

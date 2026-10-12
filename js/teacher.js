@@ -55,6 +55,19 @@
   }
 
   // ---------- 불러오기 ----------
+  // 나레이션 미리 듣기 (노트북)
+  let previewAudio = null;
+  function stopPreview() {
+    try { speechSynthesis.cancel(); } catch (e) {}
+    if (previewAudio) { try { previewAudio.pause(); } catch (e) {} previewAudio = null; }
+  }
+  function speakWeb(text, lv) {
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text.replace(/[「」📜😊]/g, ''));
+    u.lang = 'ko-KR'; u.rate = [1.0, 0.9, 0.8][lv]; u.pitch = [1.1, 0.95, 0.75][lv];
+    const v = speechSynthesis.getVoices().find((x) => /^ko/i.test(x.lang)); if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  }
   let intensityDrawn = '';
   function drawIntensity() {
     const key = JSON.stringify(roster.settings) + roster.stations.length;
@@ -64,6 +77,28 @@
     intensityDrawn = key;
     Intensity.render(el, roster.settings, {
       stationCount: roster.stations.filter((s) => s.ghost).length,
+      onStop: stopPreview,
+      onPreview: async (o, lv, which) => {
+        const LV = ['너무', '조금', '안무서움'];
+        const first = roster.stations[0];
+        const def = (window.HG_STORIES && first && HG_STORIES.byType[(first.type || '').trim()]) || null;
+        const text = which === 'station'
+          ? (((first && first.stories && first.stories[lv]) || '').trim() || (def ? def.text[lv] : ''))
+          : ((roster.settings['프롤로그_' + LV[lv]] || '').trim() || (window.HG_STORIES ? HG_STORIES.prologue[lv] : ''));
+        if (!text) return { error: '읽을 문구가 없어요' };
+        const how = o['나레이션방식'] || roster.settings['나레이션방식'] || '태블릿';
+        stopPreview();
+        if (how !== '태블릿') {
+          try {
+            const j = await post({ action: 'tts', provider: how, level: lv, text: text.replace(/[「」📜😊]/g, '') });
+            previewAudio = new Audio(URL.createObjectURL(b64ToBlob(j.data, j.mime || 'audio/mpeg')));
+            await previewAudio.play();
+            return { how };
+          } catch (e) { speakWeb(text, lv); return { error: how + ' 실패 → 노트북 음성으로 읽었어요: ' + e.message }; }
+        }
+        speakWeb(text, lv);
+        return { how: '노트북 기본 음성' };
+      },
       onSave: async (o) => { const j = await post({ action: 'settings', settings: o }); roster.settings = j.settings; intensityDrawn = JSON.stringify(j.settings) + roster.stations.length; render(); }
     });
   }

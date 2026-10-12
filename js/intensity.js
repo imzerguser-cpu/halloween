@@ -49,7 +49,7 @@
     loudVol: (st) => num(get(st, '큰소리크기'), 1, 0, 1),
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
-    render(el, st, { onSave, stationCount } = {}) {
+    render(el, st, { onSave, onPreview, onStop, stationCount } = {}) {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const max = Math.max(1, stationCount || 4);
       const sel = (k) => `<select data-k="${k}">${Array.from({ length: max + 1 }, (_, i) => `<option value="${i}"${String(i) === get(st, k) ? ' selected' : ''}>${i}곳</option>`).join('')}</select>`;
@@ -93,6 +93,11 @@
     ${LEVELS.map((l, i) => `<tr><td>${l.label}</td><td><input list="int-el-voices" data-k="나레이션목소리_${l.key}" value="${esc(get(st, '나레이션목소리_' + l.key) || ['21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL', 'pNInz6obpgDQGcFmaJgB'][i])}" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:14px"></td></tr>`).join('')}
     </table>
     <datalist id="int-el-voices"><option value="21m00Tcm4TlvDq8ikWAM">Rachel · 여성 차분</option><option value="EXAVITQu4vr4xnSDxMaL">Sarah · 여성 부드러움</option><option value="pNInz6obpgDQGcFmaJgB">Adam · 남성 낮음</option><option value="ErXwobaYiN019PkySvjV">Antoni · 남성</option></datalist>
+  </div>
+  <div class="int-row int-preview"><span>나레이션 미리 듣기</span>
+    <select class="int-pv-lv"><option value="0">😱 너무 무서워요 말투</option><option value="1" selected>😬 조금 무서워요 말투</option><option value="2">😎 하나도 안 무서워요 말투</option></select>
+    <select class="int-pv-text"><option value="prologue">출발 이야기(프롤로그)</option><option value="station">이 장소 괴담</option></select>
+    <button type="button" class="int-pv-play">🔊 미리 듣기</button><button type="button" class="int-pv-stop">■ 멈춤</button>
   </div>
   <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
@@ -140,6 +145,18 @@
       };
       el.querySelectorAll('input[name="int-voice"]').forEach((r) => { r.onchange = () => { el.querySelectorAll('.int-voices').forEach((d) => { d.hidden = d.dataset.prov !== r.value; }); }; });
       el.querySelector('.int-save').onclick = () => save(collect());
+      el.querySelector('.int-pv-stop').onclick = () => { if (onStop) onStop(); };
+      el.querySelector('.int-pv-play').onclick = async () => {
+        if (!onPreview) return msg('이 화면에서는 미리 듣기를 할 수 없어요', false);
+        const o = collect(), lv = Number(el.querySelector('.int-pv-lv').value), which = el.querySelector('.int-pv-text').value;
+        const changed = Object.keys(o).some((k) => /목소리|나레이션방식|속도|높이/.test(k) && String(o[k]) !== String(get(st, k)));
+        try {
+          if (changed && onSave) { msg('바뀐 목소리 설정을 저장하는 중...'); await onSave(o); st = Object.assign({}, st, o); }
+          msg('읽는 중...');
+          const r = await onPreview(o, lv, which);
+          msg(r && r.error ? r.error : '🔊 ' + (r && r.how ? r.how : '') + ' 목소리로 읽어요', r && r.error ? false : true);
+        } catch (e) { msg('미리 듣기 실패: ' + e.message, false); }
+      };
       el.querySelector('.int-pinsave').onclick = () => {
         const a = el.querySelector('.int-pin1').value.trim(), b = el.querySelector('.int-pin2').value.trim();
         if (!/^\d{4,8}$/.test(a)) return msg('비밀번호는 숫자 4~8자리로 해 주세요', false);
@@ -165,6 +182,6 @@
 .int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}
-.int .int-play,.int .int-shuffle{background:#252935;color:#e8eaf0}.int-msg{font-size:13px}`;
+.int .int-play,.int .int-shuffle,.int .int-pv-stop{background:#252935;color:#e8eaf0}.int-preview select{padding:7px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:14px}.int-msg{font-size:13px}`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 })();
