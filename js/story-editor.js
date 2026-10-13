@@ -15,11 +15,11 @@
       const ta = (key, val, ph) => `<textarea data-key="${esc(key)}" rows="3" placeholder="${esc(ph)}">${esc(val)}</textarea>`;
       const pro = LV.map(([k, label], i) => `<label class="se-lv">${label}${ta('p:' + i, settings['프롤로그_' + k] || '', '비우면 기본: ' + (D().prologue[i] || ''))}</label>`).join('');
       const st = stations.map((s) => {
-        const def = D().byType[(s.type || '').trim()] || { title: '', text: ['', '', ''] };
+        const def = (D().defFor && D().defFor(s)) || { title: '', text: ['', '', ''] };
         const stories = s.stories || ['', '', ''];
         return `<details class="se-st"><summary>${esc(s.name)} <small>${esc(s.storyTitle || def.title || '')}</small></summary>
           <label class="se-lv">괴담 제목<input data-key="t:${esc(s.id)}" value="${esc(s.storyTitle || '')}" placeholder="${esc('비우면 기본: ' + (def.title || ''))}"></label>
-          ${LV.map(([, label], i) => `<label class="se-lv">${label}${ta('s:' + s.id + ':' + i, stories[i] || '', '비우면 기본: ' + (def.text[i] || '').replace(/\{장소\}/g, s.name))}</label>`).join('')}
+          ${LV.map(([, label], i) => `<label class="se-lv">${label}${ta('s:' + s.id + ':' + i, stories[i] || '', '비우면 기본: ' + (def.text[i] || ''))}</label>`).join('')}
         </details>`;
       }).join('');
       el.innerHTML = `<div class="se">

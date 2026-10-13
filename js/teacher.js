@@ -81,9 +81,9 @@
       onPreview: async (o, lv, which) => {
         const LV = ['너무', '조금', '안무서움'];
         const first = roster.stations[0];
-        const def = (window.HG_STORIES && first && HG_STORIES.byType[(first.type || '').trim()]) || null;
+        const def = (window.HG_STORIES && first) ? HG_STORIES.defFor(first) : null;
         const text = which === 'station'
-          ? (((first && first.stories && first.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, first.name) : ''))
+          ? (((first && first.stories && first.stories[lv]) || '').trim() || (def ? def.text[lv] : ''))
           : ((roster.settings['프롤로그_' + LV[lv]] || '').trim() || (window.HG_STORIES ? HG_STORIES.prologue[lv] : ''));
         if (!text) return { error: '읽을 문구가 없어요' };
         const how = o['나레이션방식'] || roster.settings['나레이션방식'] || '태블릿';

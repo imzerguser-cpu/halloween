@@ -447,9 +447,9 @@
   /** 이 장소에서 쓸 이야기(3단계, 출발 장소면 프롤로그도)를 미리 만들어 둔다 — 행사 중 와이파이가 끊겨도 재생 */
   async function prefetchNarration() {
     if (!ttsProvider() || !station()) return;
-    const s = station(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
+    const s = station(), def = storyDef(s);
     for (let lv = 0; lv < 3; lv++) {
-      const txt = ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
+      const txt = ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
       if (txt) await ttsClip(cleanSpeech(txt), lv).catch(() => {});
       if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
     }
@@ -503,11 +503,12 @@
     const custom = setting('프롤로그_' + FEAR_KEY[lv], '');
     return custom || ((window.HG_STORIES && HG_STORIES.prologue[lv]) || '');
   }
+  const storyDef = (s) => (window.HG_STORIES && HG_STORIES.defFor ? HG_STORIES.defFor(s) : null);
   function stationStory(s) {
-    const lv = storyLevel(), def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
+    const lv = storyLevel(), def = storyDef(s);
     const title = (s.storyTitle || '').trim() || (def ? def.title : '');
     const custom = s.stories && s.stories[lv];
-    const text = (custom || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
+    const text = (custom || '').trim() || (def ? def.text[lv] : '');
     return text ? { title, text } : null;
   }
 
@@ -1030,8 +1031,8 @@
       onPreview: async (o, lv, which) => {
         const s = station();
         const text = which === 'station' && s ? (function () {
-          const def = (window.HG_STORIES && HG_STORIES.byType[stType()]) || null;
-          return ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv].replace(/\{장소\}/g, (station() || {}).name || '여기') : '');
+          const def = storyDef(s);
+          return ((s.stories && s.stories[lv]) || '').trim() || (def ? def.text[lv] : '');
         })() : prologueText(lv);
         if (!text) return { error: '이 장소에는 괴담 문구가 없어요' };
         const how = o['나레이션방식'] || setting('나레이션방식', '태블릿');
