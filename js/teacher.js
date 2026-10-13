@@ -104,7 +104,7 @@
         speakWeb(text, lv);
         return { how: '노트북 기본 음성' };
       },
-      onSave: async (o) => { const j = await post({ action: 'settings', settings: o }); roster.settings = j.settings; intensityDrawn = JSON.stringify(j.settings) + roster.stations.length; render(); }
+      onSave: async (o) => { const j = await post({ action: 'settings', settings: o }); roster.settings = j.settings; if (window.HG_TOUR) roster.stations = HG_TOUR.stations(roster.raw, roster.settings); intensityDrawn = JSON.stringify(j.settings) + roster.stations.length; render(); }
     });
   }
   let storyDrawn = '';
@@ -119,6 +119,7 @@
   }
   async function loadRoster() {
     roster = await get({ action: 'roster' });
+    roster.raw = roster.stations; roster.stations = window.HG_TOUR ? HG_TOUR.stations(roster.raw, roster.settings) : roster.raw;
     drawIntensity();
     drawStories();
     const sel = $('manStation'), keep = sel.value;

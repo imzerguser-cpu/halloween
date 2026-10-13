@@ -14,6 +14,10 @@
   let conf = readLS(LS_CONF) || {};
   if (!conf.apiUrl) conf.apiUrl = DEFAULT_API_URL;
   let cache = readLS(LS_CACHE) || { stations: [], settings: {} };
+  // 운영방식(인증샷 투어 / 미션)에 맞는 장소 목록. raw = 시트 장소 탭 그대로
+  const effStations = (raw, st) => (window.HG_TOUR ? HG_TOUR.stations(raw, st) : raw || []);
+  if (!cache.raw) cache.raw = (cache.stations || []).filter((s) => !s.tour);
+  cache.stations = effStations(cache.raw, cache.settings);
   let asset = null;             // 이 장소의 귀신 소재
   let assetState = '확인 전';
   let assetChecked = false;     // loadAsset 이 한 번 끝났는지
@@ -192,7 +196,7 @@
       const r = await fetch(url, { cache: 'no-store' });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error === 'key' ? '비밀 키가 맞지 않아요' : '시트 응답 오류');
-      cache = { stations: j.stations, settings: j.settings, fetchedAt: j.fetchedAt };
+      cache = { raw: j.stations, stations: effStations(j.stations, j.settings), settings: j.settings, fetchedAt: j.fetchedAt };
       writeLS(LS_CACHE, cache);
       mergeOrder(j.groups || []);
       applySchoolName();
@@ -396,7 +400,7 @@
     $('storyGroup').textContent = cur.group + '조';
     $('storyTitle').textContent = pg.title ? (pg.title === '오늘 밤의 이야기' ? '📜 ' + pg.title : '「' + pg.title + '」') : '';
     $('storyText').textContent = pg.text;
-    $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : '미션 보기 ▶';
+    $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : tourOn() ? '인증샷 찍으러 가기 ▶' : '미션 보기 ▶';
     const box = $('storyText'); box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
     show('scrStory');
     narrate(pg.text);
@@ -515,7 +519,8 @@
   function prologueText(level) {
     const lv = level == null ? 1 : level;
     const custom = setting('프롤로그_' + FEAR_KEY[lv], '');
-    return custom || ((window.HG_STORIES && HG_STORIES.prologue[lv]) || '');
+    const tour = window.HG_TOUR && HG_TOUR.on(cache.settings) && window.HG_STORIES && HG_STORIES.prologueTour;
+    return custom || ((window.HG_STORIES && (tour ? HG_STORIES.prologueTour : HG_STORIES.prologue)[lv]) || '');
   }
   const storyDef = (s) => (window.HG_STORIES && HG_STORIES.defFor ? HG_STORIES.defFor(s) : null);
   function stationStory(s) {
@@ -534,6 +539,7 @@
     '책찾기': { btn: '🔍 찾은 책 바코드 찍기', lead: '책을 찾으면 바코드를 찍어 확인해요!' },
     '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요! 사진을 몇 장 연달아 찍어요.' }
   };
+  const tourOn = () => !!(window.HG_TOUR && HG_TOUR.on(cache.settings));
   const photoOnly = () => !!(window.Intensity && Intensity.photoOnly(cache.settings));
   const stType = () => {
     const t = String(station().type || '사진').trim();
@@ -552,10 +558,10 @@
     const s = station(), t = stType();
     stopNarration();
     $('misStory').hidden = true;
-    $('misStation').textContent = '🎯 ' + s.name + ' 미션';
+    $('misStation').textContent = tourOn() ? '📸 ' + s.name + ' 인증샷' : '🎯 ' + s.name + ' 미션';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     $('misGroup').textContent = cur.group + '조';
-    $('misLead').textContent = TYPE[t].lead;
+    $('misLead').textContent = tourOn() ? '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!' : TYPE[t].lead;
     $('btnOpenCam').textContent = TYPE[t].btn;
     show('scrMission');
   }
@@ -1081,7 +1087,7 @@
     $('resGroup').textContent = rec.group + '조';
     $('resPhoto').hidden = true; $('resVideo').hidden = true; $('resVideo').removeAttribute('src');
     $('resPhotoBox').hidden = true; $('resBurst').hidden = true; $('resCount').hidden = true;
-    let title = '🎉 미션 성공!', msg = res.video ? '영상이 저장됐어요' : '사진이 저장됐어요', success = true;
+    let title = tourOn() ? '🎉 인증샷 완료!' : '🎉 미션 성공!', msg = res.video ? '영상이 저장됐어요' : '사진이 저장됐어요', success = true;
 
     if (mode === '숨김') {
       msg = (res.video ? '🎬 영상이' : '📸 사진이') + ' 안전하게 저장됐어요! 나중에 선생님과 함께 봐요.';
@@ -1120,7 +1126,8 @@
     $('resTitle').textContent = title;
     const off = window.Intensity ? Intensity.offIds(cache.settings) : [];
     const used = cache.stations.filter((x) => !off.includes(x.id)), idx = used.findIndex((x) => x.id === s.id);
-    if (success && idx >= 0 && used.length > 1) msg = `🔍 미션 ${idx + 1}/${used.length} 완료! ` + msg;
+    if (success && idx >= 0 && used.length > 1) msg = `🔍 ${tourOn() ? '장소' : '미션'} ${idx + 1}/${used.length} 완료! ` + msg;
+    $('btnDone').textContent = tourOn() ? '✅ 다음 장소로' : '✅ 미션 완료';
     $('resMsg').textContent = msg;
     setClue(success, !res.pingpong);
     show('scrResult');
@@ -1276,7 +1283,7 @@
           body: JSON.stringify({ key: conf.apiKey, action: 'settings', settings: o }) });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || '응답 오류');
-        cache.settings = j.settings; writeLS(LS_CACHE, cache);
+        cache.settings = j.settings; cache.stations = effStations(cache.raw, cache.settings); writeLS(LS_CACHE, cache);
         applySchoolName();
       }
     });
