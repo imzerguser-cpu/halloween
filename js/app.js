@@ -171,6 +171,7 @@
   const sfxOn = () => { const f = teamFear(cur.group); return !!(window.Sfx && window.Intensity) && f != null && Intensity.softOn(cache.settings, f); };
   const loudOn = () => { const f = teamFear(cur.group); return !!(window.Sfx && window.Intensity) && f != null && Intensity.loudOn(cache.settings, f); };
   const sfxVol = () => (window.Intensity ? Intensity.softVol(cache.settings) : 0.6);
+  const jumpOn = () => { const f = teamFear(cur.group); return !!window.Intensity && f != null && Intensity.jumpOn(cache.settings, f); };
   const loudVol = () => (window.Intensity ? Intensity.loudVol(cache.settings) : 1);
   /** 은은한 소리로 긴장시키고, 큰 소리가 켜져 있으면 3~6초 뒤 쾅! */
   function scheduleSpook(minMs, maxMs, name) {
@@ -636,7 +637,7 @@
   const newId = () => Date.now() + '-' + Math.random().toString(36).slice(2, 7);
   function flash() { const fl = $('camFlash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60); }
   // ---------- 화면 귀신: 카운트다운 중 미리보기에 1초 남짓 비쳤다 사라짐 (저장되는 사진에는 없음) ----------
-  let screenGhostTimer = null, screenGhostRaf = 0, screenGhostWhy = '';
+  let screenGhostTimer = null, screenGhostTimer2 = null, screenGhostRaf = 0, screenGhostWhy = '';
   function prewarmScreenGhost(force) {
     if (!((force || (wantGhostHere() && ghostOnScreen())) && window.GhostFree)) return;
     loadFree().catch(() => {});
@@ -645,14 +646,15 @@
   async function planScreenGhost() {
     const v = $('camVideo');
     if (!stream || !v.videoWidth) { screenGhostWhy = '카메라 준비 전'; return null; }
-    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id });
+    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id, visible: true });
     if (!p || !p.layer) { screenGhostWhy = p && p.reason === 'free-no-dark-spot' ? '화면에 어두운 곳이 없음' : (p && p.reason) || '귀신 그림 없음'; return null; }
     return p;
   }
   function stopScreenGhost() {
-    clearTimeout(screenGhostTimer); cancelAnimationFrame(screenGhostRaf);
+    clearTimeout(screenGhostTimer); clearTimeout(screenGhostTimer2); cancelAnimationFrame(screenGhostRaf);
     const c = $('camGhost'); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
     $('camVideo').classList.remove('glitch');
+    $('camCount').style.visibility = '';
   }
   /** 귀신을 보여 준다: 0.25초 나타남 → hold 동안 흔들리며 머묾 → 0.35초 사라짐 */
   function playScreenGhost(p, hold) {
@@ -660,7 +662,7 @@
     if (!c || !stream) return;
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.classList.toggle('mirror', v.classList.contains('mirror'));
-    const x = c.getContext('2d'), base = Math.min(0.78, p.alpha + 0.22), t0 = performance.now(), fin = 250, fout = 350;
+    const x = c.getContext('2d'), base = Math.min(0.88, Math.max(0.66, p.alpha + 0.3)), t0 = performance.now(), fin = 250, fout = 350;
     const glitch = () => { v.classList.add('glitch'); setTimeout(() => v.classList.remove('glitch'), 140); };
     glitch();
     if (sfxOn() && window.Sfx) Sfx.play('whisper', sfxVol());
@@ -676,18 +678,56 @@
     };
     screenGhostRaf = requestAnimationFrame(frame);
   }
-  /** 카운트다운. 이 조·장소에 귀신이 있고 '화면' 방식이면(force 면 무조건) 그사이 귀신을 띄운다. 셔터 0.8초 전에는 사라짐 → 띄웠으면 true */
+  /** 깜짝 얼굴: 화면 가득 큰 얼굴이 확 다가오며 흔들리고(0.7초) 큰 소리 */
+  async function playJumpFace() {
+    const v = $('camVideo'), c = $('camGhost');
+    if (!c || !stream) return false;
+    const face = GhostFree.jumpFace(await loadFree());
+    if (!face || !stream) return false;
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.classList.remove('mirror');
+    const x = c.getContext('2d'), t0 = performance.now(), dur = 700;
+    if (window.Sfx) Sfx.loud(null, loudVol());
+    v.classList.add('glitch');
+    $('camCount').style.visibility = 'hidden';
+    const frame = (now) => {
+      const t = now - t0;
+      x.clearRect(0, 0, c.width, c.height);
+      if (t >= dur || !stream) { v.classList.remove('glitch'); $('camCount').style.visibility = ''; return; }
+      const k = Math.min(1, t / 120), scale = 0.75 + 0.33 * k;               // 0.12초 만에 확 다가옴
+      const h = c.height * 1.05 * scale, w = h * face.width / face.height;
+      const jx = (Math.random() - 0.5) * c.width * 0.02, jy = (Math.random() - 0.5) * c.height * 0.02;
+      x.globalAlpha = 1;
+      x.fillStyle = 'rgba(0,0,0,0.55)'; x.fillRect(0, 0, c.width, c.height);
+      x.globalAlpha = t > dur - 120 ? (dur - t) / 120 : 0.95;
+      x.drawImage(face, (c.width - w) / 2 + jx, c.height * 0.02 + jy, w, h);
+      screenGhostRaf = requestAnimationFrame(frame);
+    };
+    screenGhostRaf = requestAnimationFrame(frame);
+    return true;
+  }
+  /** 카운트다운. 이 조·장소에 귀신이 있고 '화면' 방식이면(force 면 무조건) 그사이 귀신을 띄운다. 셔터 0.8초 전에는 사라짐 → 띄웠으면 true
+   *  깜짝 얼굴을 켠 무서움 단계(또는 force === 'jump')면 귀신 뒤에 큰 얼굴 + 큰 소리 */
   async function photoCountdown(n, force) {
     const want = n >= 4 && (force || (wantGhostHere() && ghostOnScreen())) && !!window.GhostFree;
+    const jump = want && (force === 'jump' || (!force && jumpOn()));
     let shown = false;
     screenGhostWhy = want ? '' : '귀신 없는 조·장소';
+    if (jump) {
+      clearTimeout(loudTimer);                                               // 큰 소리는 깜짝 얼굴과 함께
+      const jumpAt = n * 1000 - 800 - 700;
+      screenGhostTimer2 = setTimeout(() => { cancelAnimationFrame(screenGhostRaf); playJumpFace().then((ok) => { if (ok) shown = true; }); }, jumpAt);
+    }
     if (want) {
-      const start = performance.now(), hold = 1200 + Math.random() * 400, need = 250 + hold + 350;
-      const appearAt = 1000 + Math.random() * Math.max(0, n * 1000 - need - 2000);
+      // 귀신은 카운트다운 1초쯤 나타나 약 1초 머문다 (나타남·사라짐 0.6초 포함 1.5~1.8초). 준비가 늦으면 남은 시간만큼 줄이되 0.6초 미만이면 안 띄움
+      const start = performance.now();
+      const room = n * 1000 - 800 - (jump ? 700 + 300 : 0);                // 귀신이 사라져야 하는 때
+      const appearAt = 900;
       planScreenGhost().then((p) => {
         if (!p) return;
         const wait = Math.max(0, start + appearAt - performance.now());
-        if (performance.now() + wait + need > start + n * 1000 - 800) { screenGhostWhy = '준비가 늦어 건너뜀'; return; }
+        const hold = Math.min(900 + Math.random() * 300, start + room - performance.now() - wait - 600);
+        if (hold < 600) { screenGhostWhy = '준비가 늦어 건너뜀'; return; }
         screenGhostTimer = setTimeout(() => { shown = true; playScreenGhost(p, hold); }, wait);
       }).catch((e) => { screenGhostWhy = e.message; });
     }
@@ -709,7 +749,7 @@
       if (camMode === 'burst') return await shootBurst();
       if (camMode === 'screentest') {
         $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
-        const shown = await photoCountdown(5, true);
+        const shown = await photoCountdown(5, screenTestJump ? 'jump' : true);
         $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
         flash(); closeCamera(); openAdmin('tools');
         return toast(shown ? '화면 귀신 미리보기를 마쳤어요 (사진은 저장하지 않았어요)' : '이번엔 귀신이 안 나왔어요: ' + (screenGhostWhy || '어두운 곳을 못 찾음'), 5000);
@@ -1069,7 +1109,7 @@
   }
 
   // ---------- 교사 모드 ----------
-  let tapCount = 0, tapTimer = null;
+  let tapCount = 0, tapTimer = null, screenTestJump = false;
   document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-admin-tap]')) return;
     tapCount++; clearTimeout(tapTimer);
@@ -1385,7 +1425,8 @@
     $('btnWipe').onclick = wipe;
     $('btnBgShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('background'); };
     $('btnTestShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('test'); };
-    $('btnScreenGhostTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('screentest'); };
+    $('btnScreenGhostTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = false; openCamera('screentest'); };
+    $('btnJumpTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = true; if (window.Sfx) Sfx.unlock(); openCamera('screentest'); };
   }
 
   // ---------- 시작 ----------

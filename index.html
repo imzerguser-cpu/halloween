@@ -58,7 +58,7 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 #camVideo.glitch{filter:brightness(1.5) contrast(1.6) saturate(.3)}
 /* 화면 조명: 앞면 카메라일 때 미리보기 둘레를 하얗게 밝혀 얼굴을 비춘다 */
 #scrCamera.lit{background:#fff}
-#scrCamera.lit #camVideo,#scrCamera.lit #camGhost{inset:9vh 12vw;width:auto;height:auto;border-radius:14px}
+#scrCamera.lit #camVideo,#scrCamera.lit #camGhost{inset:auto;top:9vh;left:12vw;width:76vw;height:82vh;border-radius:14px}
 #scrCamera.lit .cam-top,#scrCamera.lit .cam-hint{color:#222;text-shadow:none;background:none}
 #scrCamera.lit .cam-bar{background:none}
 #scrCamera.lit .shutter{border-color:#2a1d4a;background:rgba(42,29,74,.15)}
@@ -593,6 +593,7 @@ button{touch-action:manipulation}
         <h3>화면 귀신 미리보기</h3>
         <p>학생이 찍을 때처럼 카메라를 켜고, 촬영 버튼을 누르면 5초 카운트다운 중 귀신이 화면에 1초쯤 비쳤다 사라집니다. 조 배정과 관계없이 무조건 나오고, 사진은 저장하지 않습니다.</p>
         <button class="btn sm" id="btnScreenGhostTest">👀 화면 귀신 미리보기</button>
+        <button class="btn sm" id="btnJumpTest">😱 깜짝 얼굴까지 미리보기 (큰 소리 주의)</button>
       </div>
       <div class="panel">
         <h3>카메라 (이 태블릿)</h3>

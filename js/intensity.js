@@ -13,6 +13,7 @@
     '귀신수_너무': '0', '귀신수_조금': '1', '귀신수_안무서움': '2',
     '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
+    '깜짝얼굴_너무': '아니오', '깜짝얼굴_조금': '아니오', '깜짝얼굴_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
@@ -46,6 +47,8 @@
     ghostCount: (st, fear) => Math.round(num(get(st, '귀신수_' + lv(fear)), 1, 0, 9)),
     softOn: (st, fear) => yes(get(st, '은은한소리_' + lv(fear))),
     loudOn: (st, fear) => yes(get(st, '큰소리_' + lv(fear))),
+    /** 화면 귀신 뒤 큰 얼굴 + 큰 소리 */
+    jumpOn: (st, fear) => yes(get(st, '깜짝얼굴_' + lv(fear))),
     softVol: (st) => num(get(st, '효과음크기'), 0.6, 0, 1),
     loudVol: (st) => num(get(st, '큰소리크기'), 1, 0, 1),
     /** 모든 장소를 사진 인증샷으로 (영상·연속사진 대신 사진 1장) */
@@ -67,10 +70,10 @@
       const reveal = get(st, '공개방식');
       el.innerHTML = `
 <div class="int">
-  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th></tr>
-  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td></tr>`).join('')}
+  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th></tr>
+  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td></tr>`).join('')}
   </table>
-  <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다.</p>
+  <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 큰 소리가 납니다(이때는 따로 큰 소리를 내지 않음).</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
   ${rng('큰소리크기', '큰 소리 크기', 'loud')}
   <div class="int-row"><span>찍은 뒤 학생에게 보여 주기</span>

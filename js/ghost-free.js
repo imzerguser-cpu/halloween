@@ -116,16 +116,16 @@
     let r = 0, gg = 0, b = 0, n = 0;
     for (let y = spot.y; y < spot.y + spot.h; y++) for (let x = spot.x; x < spot.x + spot.w; x++) { const k = (y * a.W + x) * 4; r += a.d[k]; gg += a.d[k + 1]; b += a.d[k + 2]; n++; }
     r /= n; gg /= n; b /= n;
-    const target = clamp(spot.m * 1.35 + 0.06, 0.1, 0.5);
+    const target = opts.visible ? clamp(spot.m * 1.5 + 0.3, 0.34, 0.66) : clamp(spot.m * 1.35 + 0.06, 0.1, 0.5);
     const bright = clamp(target / Math.max(0.05, g.lum), 0.2, 1.3);
-    const blur = Math.max(0.8, photo.width / 1000) * (g.kind === 'face' ? 1 : 1.4);
+    const blur = Math.max(0.8, photo.width / 1000) * (g.kind === 'face' ? 1 : 1.4) * (opts.visible ? 0.7 : 1);
 
     const layer = canvas(gw, gh), lx = layer.getContext('2d');
     lx.filter = `grayscale(0.9) brightness(${bright.toFixed(3)}) contrast(0.72) blur(${blur.toFixed(2)}px)`;
     lx.drawImage(g.image, 0, 0, gw, gh);
     lx.filter = 'none';
     lx.globalCompositeOperation = 'source-atop';                       // 주변 빛 색으로 물들이기
-    lx.fillStyle = `rgba(${r | 0},${gg | 0},${b | 0},0.38)`; lx.fillRect(0, 0, gw, gh);
+    lx.fillStyle = `rgba(${r | 0},${gg | 0},${b | 0},${opts.visible ? 0.15 : 0.38})`; lx.fillRect(0, 0, gw, gh);
     {                                                                   // 아래쪽(발끝·어깨)은 흐릿하게 사라지게
       lx.globalCompositeOperation = 'destination-out';
       const grad = lx.createLinearGradient(0, gh * (g.kind === 'full' ? 0.78 : 0.6), 0, gh);
@@ -165,5 +165,20 @@
     return { blob, applied: !!blob, reason: blob ? '' : 'free-encode-failed', file: p.file, box: p.box };
   }
 
-  window.GhostFree = { load, plan, composite };
+  /** 깜짝 얼굴: 얼굴 귀신 그림을 화면 가득 쓸 수 있게 흑백·고대비로 만든다 */
+  function jumpFace(lib) {
+    const g = (lib && lib.ghosts || []).find((x) => x.kind === 'face') || (lib && lib.ghosts || [])[0];
+    if (!g) return null;
+    const c = canvas(g.image.width, g.image.height), x = c.getContext('2d');
+    x.filter = 'grayscale(1) contrast(1.45) brightness(0.92)';
+    x.drawImage(g.image, 0, 0);
+    x.filter = 'none';
+    x.globalCompositeOperation = 'destination-out';                       // 어깨 쪽은 어둠 속으로
+    const grad = x.createLinearGradient(0, c.height * 0.55, 0, c.height);
+    grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,1)');
+    x.fillStyle = grad; x.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+
+  window.GhostFree = { load, plan, composite, jumpFace };
 })();
