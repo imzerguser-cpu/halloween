@@ -33,6 +33,7 @@
   const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrStory', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
   function show(id) {
     SCREENS.forEach((s) => { $(s).hidden = s !== id; });
+    const ab = $('btnAdminEnter'); if (ab) ab.hidden = !(id === 'scrHome' || id === 'scrSetup');   // 첫 화면에서만 보이는 교사 모드 버튼
     window.scrollTo(0, 0);
   }
   function goHome() {
@@ -1360,6 +1361,7 @@
     $('btnDone').onclick = goHome;
     $('btnPinCancel').onclick = goHome;
     $('btnAdminExit').onclick = goHome;
+    $('btnAdminEnter').onclick = openPin;
     $('adminTabs').onclick = (e) => { const t = e.target.closest('.tab'); if (t) switchTab(t.dataset.tab); };
     $('btnLoadRoster').onclick = async () => {
       conf.apiUrl = $('inApiUrl').value.trim(); conf.apiKey = $('inApiKey').value.trim(); writeLS(LS_CONF, conf);
