@@ -70,7 +70,7 @@
   /** 귀신 하나를 놓을 자리: 어둡고, 사람과 안 겹치고, 가장자리에 너무 붙지 않은 곳 */
   // 셀카 화면: 얼굴 귀신을 학생 얼굴만 하게(화면 높이 40~55%), 학생 옆·뒤에서 들여다보듯
   const SELFIE_H = [0.4, 0.55];
-  function place(a, g, rnd, selfie) {
+  function place(a, g, rnd, selfie, anyLight) {
     const range = selfie ? SELFIE_H : g.height || KIND_H[g.kind] || KIND_H.full;
     const best = [];
     for (const f of [1, 0.85, 0.7]) {
@@ -82,7 +82,7 @@
         if (!selfie && g.kind !== 'full' && y + h > a.H * 0.6) continue;   // 얼굴·상반신은 창문 높이(화면 위쪽)에
         if (selfie && y > a.H * 0.35) continue;                              // 셀카: 얼굴이 학생 얼굴 높이쯤
         const p = a.person(x, y, w, h);
-        if (p > (selfie ? 0.35 : 0.02)) continue;                            // 셀카: 학생 뒤에 조금 가려져도 됨
+        if (p > (anyLight ? 0.7 : selfie ? 0.35 : 0.02)) continue;                            // 셀카: 학생 뒤에 조금 가려져도 됨
         const m = a.mean(x, y, w, h);
         const cx = (x + w / 2) / a.W, edge = !selfie && (cx < 0.12 || cx > 0.88) ? 0.04 : 0;
         best.push({ x, y, w, h, m, score: m + edge + p * (selfie ? 0.6 : 3) });
@@ -93,7 +93,7 @@
     best.sort((p, q) => p.score - q.score);
     const top = best[0], pool = best.filter((b) => b.score <= top.score + 0.03 && Math.abs(b.x - top.x) + Math.abs(b.y - top.y) > 0).slice(0, 40);
     const pick = pool.length && rnd() < 0.6 ? pool[Math.floor(rnd() * pool.length)] : top;
-    if (pick.m > (selfie ? Math.max(0.6, a.median * 1.2) : Math.max(0.42, a.median * 1.05))) return null;   // 어두운 곳이 없으면 넣지 않는다
+    if (!anyLight && pick.m > (selfie ? Math.max(0.6, a.median * 1.2) : Math.max(0.42, a.median * 1.05))) return null;   // 어두운 곳이 없으면 넣지 않는다
     return pick;
   }
 
@@ -111,7 +111,7 @@
     const pref = lib.ghosts.filter((g) => g.stations && opts.stationId && g.stations.includes(opts.stationId));
     const pool = (faces.length ? faces : pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
     let g = null, spot = null;
-    for (const cand of pool) { spot = place(a, cand, rnd, !!opts.selfie && cand.kind === 'face'); if (spot) { g = cand; break; } }
+    for (const cand of pool) { spot = place(a, cand, rnd, !!opts.selfie && cand.kind === 'face', !!opts.anyLight); if (spot) { g = cand; break; } }
     if (!spot) return { reason: 'free-no-dark-spot' };
 
     const sx = photo.width / a.W, sy = photo.height / a.H;

@@ -643,10 +643,11 @@
     loadFree().catch(() => {});
     if (window.GhostEngine) GhostEngine.init({ base: './' }).catch(() => {});
   }
-  async function planScreenGhost() {
+  /** anyLight: 교사 미리보기 — 밝은 곳이어도 무조건 띄운다 */
+  async function planScreenGhost(anyLight) {
     const v = $('camVideo');
     if (!stream || !v.videoWidth) { screenGhostWhy = '카메라 준비 전'; return null; }
-    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id, visible: true, selfie: camFacing() === 'user' });
+    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id, visible: true, selfie: camFacing() === 'user', anyLight: !!anyLight });
     if (!p || !p.layer) { screenGhostWhy = p && p.reason === 'free-no-dark-spot' ? '화면에 어두운 곳이 없음' : (p && p.reason) || '귀신 그림 없음'; return null; }
     return p;
   }
@@ -723,7 +724,7 @@
       const start = performance.now();
       const room = n * 1000 - 800 - (jump ? 700 + 300 : 0);                // 귀신이 사라져야 하는 때
       const appearAt = 900;
-      planScreenGhost().then((p) => {
+      planScreenGhost(!!force).then((p) => {
         if (!p) return;
         const wait = Math.max(0, start + appearAt - performance.now());
         const hold = Math.min(900 + Math.random() * 300, start + room - performance.now() - wait - 600);
