@@ -49,7 +49,8 @@
   function ghostStationsFor(g, ex) {
     if (ex.has(g.group)) return [];
     const st = roster.settings || {}, seed = String(st['귀신시드'] || '0');
-    const list = roster.stations.filter((s) => s.ghost).map((s) => s.id).sort()
+    const off = Intensity.offIds(st);
+    const list = roster.stations.filter((s) => s.ghost && !off.includes(s.id)).map((s) => s.id).sort()
       .sort((a, b) => fnv1a(seed + ':' + g.group + ':' + a) - fnv1a(seed + ':' + g.group + ':' + b));
     return list.slice(0, Intensity.ghostCount(st, g.fear));
   }
@@ -77,6 +78,7 @@
     intensityDrawn = key;
     Intensity.render(el, roster.settings, {
       stationCount: roster.stations.filter((s) => s.ghost).length,
+      stations: roster.stations,
       onStop: stopPreview,
       onPreview: async (o, lv, which) => {
         const LV = ['너무', '조금', '안무서움'];
@@ -151,7 +153,8 @@
     if (!roster) return;
     const ex = excludedGroups();
     const list = rows.filter(Boolean);
-    const st = roster.stations;
+    const off = Intensity.offIds(roster.settings);
+    const st = roster.stations.filter((s) => !off.includes(s.id));
     let h = '<tr><th>조</th><th>인원·출발</th>' + st.map((s) => `<th>${esc(s.name)}</th>`).join('') + '</tr>';
     roster.groups.forEach((g) => {
       const ghostAt = ghostStationsFor(g, ex);

@@ -589,6 +589,8 @@ button{touch-action:manipulation}
         <label class="row" style="gap:6px;margin-bottom:6px"><input type="radio" name="camFacing" value="user" style="width:auto"> 앞면 카메라 (화면 쪽, 학생이 자기 모습을 보며 찍음)</label>
         <label class="row" style="gap:6px;margin-bottom:10px"><input type="radio" name="camFacing" value="environment" style="width:auto"> 뒷면 카메라</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="chkScreenLight" style="width:auto"> 화면 조명 (앞면 카메라일 때 화면 둘레를 하얗게 밝혀 얼굴을 비춤 · 태블릿 밝기 최대 권장)</label>
+        <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="chkFlash" style="width:auto"> 플래시 (뒷면 카메라일 때 찍는 순간 플래시를 터뜨림 · 어두운 곳에서 들고 찍을 때)</label>
+        <p style="margin-top:6px">강도 설정에서 "모든 장소 사진 인증샷"을 고르면, 이 칸을 한 번도 바꾸지 않은 태블릿은 뒷면 카메라로 찍어요.</p>
       </div>
       <div class="panel">
         <h3>나레이션 목소리 (이 태블릿)</h3>
@@ -632,6 +634,7 @@ button{touch-action:manipulation}
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
 <script src="js/ghost-engine.js" defer></script>
+<script src="js/ghost-free.js" defer></script>
 <script src="js/sfx.js" defer></script>
 <script src="js/intensity.js" defer></script>
 <script src="js/stories.js" defer></script>

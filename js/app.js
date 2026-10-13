@@ -149,7 +149,8 @@
     return h >>> 0;
   }
   function ghostStations() {
-    return cache.stations.filter((s) => s.ghost).map((s) => s.id).sort();
+    const off = window.Intensity ? Intensity.offIds(cache.settings) : [];
+    return cache.stations.filter((s) => s.ghost && !off.includes(s.id)).map((s) => s.id).sort();
   }
   /** 이 조에 귀신이 나오는 장소 id 목록.
    *  1·2학년 있음 / 너무 무서움 / 귀신제외조 / 출발 기록을 모르는 조 → 없음
@@ -520,7 +521,12 @@
     '책찾기': { btn: '🔍 찾은 책 바코드 찍기', lead: '책을 찾으면 바코드를 찍어 확인해요!' },
     '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요! 사진을 몇 장 연달아 찍어요.' }
   };
-  const stType = () => { const t = String(station().type || '사진').trim(); return TYPE[t] ? t : '사진'; };
+  const photoOnly = () => !!(window.Intensity && Intensity.photoOnly(cache.settings));
+  const stType = () => {
+    const t = String(station().type || '사진').trim();
+    if (photoOnly() && t !== '책찾기') return '사진';   // 모든 장소 사진 인증샷 (책찾기는 바코드 확인 뒤 사진)
+    return TYPE[t] ? t : '사진';
+  };
   const stValue = (d) => { const v = parseFloat(station().value); return Number.isFinite(v) && v > 0 ? v : d; };
   const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationsFor(cur.group).includes(s.id)); };
 
@@ -543,7 +549,7 @@
   // ---------- 카메라 ----------
   const STUDENT_MODES = ['student', 'video', 'scan', 'burst'];
   // 이 태블릿의 카메라: 앞면(user, 기본) / 뒷면(environment). 앞면은 미리보기만 거울처럼 보여 주고 저장은 정상 방향
-  const camFacing = () => (conf.facing === 'environment' ? 'environment' : 'user');
+  const camFacing = () => (conf.facing ? (conf.facing === 'environment' ? 'environment' : 'user') : (photoOnly() ? 'environment' : 'user'));
   async function openCamera(mode) {
     camMode = mode;
     $('camVideo').classList.toggle('mirror', camFacing() === 'user');
@@ -592,6 +598,31 @@
     c.getContext('2d').drawImage(v, 0, 0);
     return c;
   }
+  // 뒷면 카메라 + 플래시: 사진 찍는 순간 플래시(지원하면 takePhoto, 아니면 손전등 켜고 한 장)
+  const flashOn = () => camFacing() === 'environment' && conf.flash !== false;
+  async function setTorch(on) {
+    const tr = stream && stream.getVideoTracks()[0];
+    try { if (tr && (tr.getCapabilities ? tr.getCapabilities().torch : false)) { await tr.applyConstraints({ advanced: [{ torch: on }] }); return true; } } catch (e) {}
+    return false;
+  }
+  async function captureStill() {
+    const tr = stream && stream.getVideoTracks()[0];
+    if (!flashOn() || !tr) return grabFrame();
+    try {
+      if ('ImageCapture' in window) {
+        const ic = new ImageCapture(tr), caps = await ic.getPhotoCapabilities();
+        if (caps.fillLightMode && caps.fillLightMode.includes('flash')) {
+          const blob = await ic.takePhoto({ fillLightMode: 'flash' });
+          const bmp = await createImageBitmap(blob), k = Math.min(1, 1920 / Math.max(bmp.width, bmp.height));
+          const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+          c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
+          return c;
+        }
+      }
+    } catch (e) { /* 손전등 방식으로 */ }
+    if (await setTorch(true)) { await sleep(450); const c = grabFrame(); setTorch(false); return c; }
+    return grabFrame();
+  }
   const canvasToBlob = (c, q) => new Promise((res) => c.toBlob(res, 'image/jpeg', q || 0.92));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const newId = () => Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -609,7 +640,7 @@
       if (camMode === 'video') return await startVideo();
       if (camMode === 'burst') return await shootBurst();
       if ($('camTimer').checked && camMode === 'student') await countdown(3);
-      const frame = grabFrame();
+      const frame = camMode === 'student' ? await captureStill() : grabFrame();
       flash();
       closeCamera();
       if (camMode === 'background') await saveBackground(frame);
@@ -618,10 +649,17 @@
     } finally { if (!recorder) shooting = false; }
   }
 
+  let freeLib = null;
+  const loadFree = () => freeLib || (freeLib = window.GhostFree ? GhostFree.load('./').catch((e) => { freeLib = null; throw e; }) : Promise.reject(new Error('자유 배치 없음')));
   async function compose(frame) {
-    if (!asset || !window.GhostEngine) return { blob: null, applied: false, reason: assetState };
-    try { return await GhostEngine.composite(frame, asset, { quality: 0.92 }); }
-    catch (e) { return { blob: null, applied: false, reason: 'error: ' + e.message }; }
+    let fixed = { blob: null, applied: false, reason: assetState };
+    if (asset && window.GhostEngine) {
+      try { fixed = await GhostEngine.composite(frame, asset, { quality: 0.92 }); }
+      catch (e) { fixed = { blob: null, applied: false, reason: 'error: ' + e.message }; }
+    }
+    if (fixed.applied || !(window.Intensity && Intensity.freeGhost(cache.settings))) return fixed;
+    try { return await GhostFree.composite(frame, await loadFree(), { stationId: (station() || {}).id, quality: 0.92 }); }
+    catch (e) { return { blob: null, applied: false, reason: (fixed.reason || '') + ' / free: ' + e.message }; }
   }
 
   function baseRecord(extra) {
@@ -657,6 +695,8 @@
     $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
     await countdown(10, 1000);
     const frames = [];
+    const torch = flashOn() && await setTorch(true);
+    if (torch) await sleep(400);
     $('camBurst').hidden = false;
     for (let i = 0; i < n; i++) {
       frames.push(grabFrame()); flash();
@@ -664,6 +704,7 @@
       if (i < n - 1) await sleep(500);
     }
     $('camBurst').hidden = true; $('btnShutter').hidden = false; $('btnCamCancel').hidden = false;
+    if (torch) await setTorch(false);
     closeCamera();
     show('scrSaving'); setSaving('사진을 저장하고 있어요...', 0);
     const t0 = Date.now(), takenAt = Date.now();
@@ -898,8 +939,9 @@
       }
     }
     $('resTitle').textContent = title;
-    const idx = cache.stations.findIndex((x) => x.id === s.id);
-    if (success && idx >= 0 && cache.stations.length > 1) msg = `🔍 미션 ${idx + 1}/${cache.stations.length} 완료! ` + msg;
+    const off = window.Intensity ? Intensity.offIds(cache.settings) : [];
+    const used = cache.stations.filter((x) => !off.includes(x.id)), idx = used.findIndex((x) => x.id === s.id);
+    if (success && idx >= 0 && used.length > 1) msg = `🔍 미션 ${idx + 1}/${used.length} 완료! ` + msg;
     $('resMsg').textContent = msg;
     setClue(success, !res.pingpong);
     show('scrResult');
@@ -1027,6 +1069,7 @@
     if (!window.Intensity) return;
     Intensity.render($('intensityPanel'), cache.settings, {
       stationCount: ghostStations().length,
+      stations: cache.stations,
       onStop: stopNarration,
       onPreview: async (o, lv, which) => {
         const s = station();
@@ -1170,6 +1213,7 @@
   function renderCamSettings() {
     document.querySelectorAll('input[name="camFacing"]').forEach((r) => { r.checked = r.value === camFacing(); });
     $('chkScreenLight').checked = !!conf.screenLight;
+    $('chkFlash').checked = conf.flash !== false;
   }
   function renderDiag() {
     const es = window.GhostEngine && GhostEngine.status ? GhostEngine.status() : null;
@@ -1226,6 +1270,7 @@
     $('btnResetTeams').onclick = resetTeams;
     document.querySelectorAll('input[name="camFacing"]').forEach((r) => { r.onchange = () => { conf.facing = r.value; writeLS(LS_CONF, conf); toast(r.value === 'user' ? '앞면 카메라로 찍어요' : '뒷면 카메라로 찍어요'); }; });
     $('chkScreenLight').onchange = (e) => { conf.screenLight = e.target.checked; writeLS(LS_CONF, conf); };
+    $('chkFlash').onchange = (e) => { conf.flash = e.target.checked; writeLS(LS_CONF, conf); };
     $('btnOpenCam').onclick = startStudentCamera;
     $('btnShutter').onclick = shoot;
     $('btnCamCancel').onclick = () => { closeCamera(); backFromCamera(); };

@@ -16,7 +16,8 @@
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
-    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿'
+    '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
+    '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': ''
   };
   function get(st, k) {
     st = st || {};
@@ -47,9 +48,15 @@
     loudOn: (st, fear) => yes(get(st, '큰소리_' + lv(fear))),
     softVol: (st) => num(get(st, '효과음크기'), 0.6, 0, 1),
     loudVol: (st) => num(get(st, '큰소리크기'), 1, 0, 1),
+    /** 모든 장소를 사진 인증샷으로 (영상·연속사진 대신 사진 1장) */
+    photoOnly: (st) => get(st, '촬영방식') === '사진',
+    /** 빈 배경이 맞지 않으면(들고 찍은 사진) 어두운 곳에 귀신을 자유 배치 */
+    freeGhost: (st) => yes(get(st, '자유배치')),
+    /** 이번 행사에서 쓰지 않는 장소 id */
+    offIds: (st) => String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean),
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
-    render(el, st, { onSave, onPreview, onStop, stationCount } = {}) {
+    render(el, st, { onSave, onPreview, onStop, stationCount, stations } = {}) {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const max = Math.max(1, stationCount || 4);
       const sel = (k) => `<select data-k="${k}">${Array.from({ length: max + 1 }, (_, i) => `<option value="${i}"${String(i) === get(st, k) ? ' selected' : ''}>${i}곳</option>`).join('')}</select>`;
@@ -101,6 +108,18 @@
   </div>
   <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
+  <div class="int-row"><span>촬영 방법</span>
+    <label class="int-chk"><input type="radio" name="int-shot" value="미션대로"${get(st, '촬영방식') !== '사진' ? ' checked' : ''}> 미션대로 (스태킹·탁구공은 영상, 동상은 연속사진)</label>
+    <label class="int-chk"><input type="radio" name="int-shot" value="사진"${get(st, '촬영방식') === '사진' ? ' checked' : ''}> 모든 장소 사진 인증샷 (태블릿을 들고 플래시로 찍기)</label>
+  </div>
+  <div class="int-row"><span>귀신 넣는 방법</span>
+    <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 사진의 어두운 곳에 귀신 그림을 자동으로 넣기</label>
+  </div>
+  ${stations && stations.length ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
+    ${stations.map((s) => `<label class="int-chk"><input type="checkbox" data-use="${esc(s.id)}"${api.offIds(st).includes(s.id) ? '' : ' checked'}> ${esc(s.name)}</label>`).join('')}
+  </div>
+  <p class="int-help">체크를 끈 장소는 귀신 배정과 진행판에서 빠집니다. 동선 안내(다음 장소 단서)는 시트 "장소" 탭의 단서 칸에서 고쳐 주세요.</p>` : ''}
+
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
     <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">
   </div>
@@ -135,6 +154,9 @@
         const rv = el.querySelector('input[name="int-reveal"]:checked'); if (rv) o['공개방식'] = rv.value;
         const pk = el.querySelector('input[name="int-pick"]:checked'); if (pk) o['조선정'] = pk.value;
         const vc = el.querySelector('input[name="int-voice"]:checked'); if (vc) o['나레이션방식'] = vc.value;
+        const sh = el.querySelector('input[name="int-shot"]:checked'); if (sh) o['촬영방식'] = sh.value;
+        const use = el.querySelectorAll('input[data-use]');
+        if (use.length) o['쉬는장소'] = [...use].filter((c) => !c.checked).map((c) => c.dataset.use).join(',');
         return o;
       };
       const save = async (o, label) => {

@@ -686,5 +686,5 @@
       return { blob: null, mime: '', ext: '', applied: false, reason: String(e.message || e), path, ms: Math.round(performance.now() - started), ...(fallbackReason ? { stats: { fallbackReason } } : {}) };
     }
   }
-  window.GhostEngine = { init, status, loadAsset, composite, startVideo, videoSupport, editVideo, editSupport, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause } };
+  window.GhostEngine = { init, status, loadAsset, composite, startVideo, videoSupport, editVideo, editSupport, utils: { canvas, draw, pixels, encode, decode, validate, align, clamp, median, pause, personMask } };
 })();

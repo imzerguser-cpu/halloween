@@ -1,0 +1,8 @@
+{
+  "ghosts": [
+    { "file": "ghost-white.png", "kind": "full", "height": [0.34, 0.5] },
+    { "file": "ghost-school.png", "kind": "full", "height": [0.32, 0.46] },
+    { "file": "ghost-child.png", "kind": "full", "height": [0.24, 0.36] },
+    { "file": "ghost-face.png", "kind": "face", "height": [0.16, 0.24] }
+  ]
+}
