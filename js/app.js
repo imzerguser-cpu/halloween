@@ -247,7 +247,7 @@
   // 시트 "기록" 탭에 남길 정보 (이름 없음 — 조 번호만)
   function uploadMeta(rec, isOriginal) {
     const record = rec.timeMs != null ? (rec.timeMs / 1000).toFixed(1) + '초'
-      : rec.count != null ? `공 ${rec.count}개` : rec.seq ? `${rec.seq}번째` : '';
+      : rec.count != null ? `공 ${rec.count}개` : rec.reaction ? '놀람 장면' + (rec.seq ? ` ${rec.seq}` : '') : rec.seq ? `${rec.seq}번째` : '';
     return {
       recId: rec.id, group: rec.group, stationId: rec.stationId, stationName: rec.stationName,
       media: rec.kind === 'video' ? '영상' : '사진',
@@ -270,7 +270,7 @@
     const d = new Date(rec.takenAt);
     const t = `${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     const seq = rec.seq ? '_' + pad(rec.seq) : '';
-    return `${rec.group}조_${rec.stationName}_${t}${seq}_${kind}.${rec.ext || 'jpg'}`;
+    return `${rec.group}조_${rec.stationName}_${t}${rec.reaction ? '_놀람' : ''}${seq}_${kind}.${rec.ext || 'jpg'}`;
   }
 
   // ---------- 귀신 소재 ----------
@@ -534,6 +534,7 @@
   const ghostView = () => (window.Intensity ? Intensity.ghostView(cache.settings) : '사진');
   const ghostOnScreen = () => ghostView() !== '사진';
   const ghostInPhoto = () => ghostView() !== '화면';
+  const reactMode = () => (window.Intensity ? Intensity.reactMode(cache.settings) : '끔');
   const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationsFor(cur.group).includes(s.id)); };
 
   function openMission() {
@@ -574,12 +575,12 @@
     $('camTimerLabel').hidden = mode !== 'student' || photoOnly();
     show('scrCamera');
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: mode === 'video',
-        video: mode === 'video'
-          ? { facingMode: { ideal: camFacing() }, width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { facingMode: { ideal: camFacing() }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-      });
+      const video = mode === 'video'
+        ? { facingMode: { ideal: camFacing() }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { facingMode: { ideal: camFacing() }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+      const wantMic = mode === 'video' || (['student', 'burst'].includes(mode) && ['영상', '둘다'].includes(reactMode()) && wantGhostHere() && ghostOnScreen());
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: wantMic, video }); }
+      catch (e) { if (!wantMic || mode === 'video') throw e; stream = await navigator.mediaDevices.getUserMedia({ audio: false, video }); }
       const v = $('camVideo'); v.srcObject = stream; await v.play();
     } catch (e) {
       closeCamera();
@@ -679,6 +680,50 @@
     };
     screenGhostRaf = requestAnimationFrame(frame);
   }
+  // ---------- 놀람 촬영: 귀신이 나온 순간 학생 반응을 몰래 연사(5장)·영상으로 남긴다 ----------
+  function startReaction(test) {
+    const m = reactMode();
+    if (m === '끔' && !test) return null;
+    const r = { frames: [], chunks: [], test, photos: test || m !== '영상', video: !test && (m === '영상' || m === '둘다'), fired: false, done: null, rec: null, mime: '' };
+    if (r.video && stream && typeof MediaRecorder !== 'undefined') {
+      const mime = pickVideoMime();
+      if (mime) {
+        try {
+          r.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 96000 });
+          r.rec.ondataavailable = (e) => { if (e.data && e.data.size) r.chunks.push(e.data); };
+          r.rec.start(500); r.mime = mime;
+        } catch (e) { r.rec = null; }
+      }
+    }
+    return r;
+  }
+  function triggerReaction(r) {
+    if (!r || r.fired) return;
+    r.fired = true;
+    if (!r.photos) return;
+    r.done = (async () => {                                                  // 놀라는 데 0.2~0.3초 걸리므로 조금 뒤부터 0.2초 간격 5장
+      await sleep(250);
+      for (let i = 0; i < 5 && stream; i++) { r.frames.push(grabFrame()); if (i < 4) await sleep(200); }
+    })();
+  }
+  async function finishReaction(r) {
+    if (!r) return 0;
+    if (r.done) await r.done.catch(() => {});
+    let video = null;
+    if (r.rec) {
+      await new Promise((res) => { r.rec.onstop = res; try { r.rec.stop(); } catch (e) { res(); } setTimeout(res, 1500); });
+      if (r.fired && r.chunks.length) video = new Blob(r.chunks, { type: r.mime.split(';')[0] });
+    }
+    if (r.test) {
+      if (r.frames.length) openModal(await canvasToBlob(r.frames[Math.min(2, r.frames.length - 1)]), `놀람 연사 ${r.frames.length}장 중 3번째 (시험이라 저장 안 함)`);
+      return r.frames.length;
+    }
+    const recs = [], takenAt = Date.now();
+    for (let i = 0; i < r.frames.length; i++) recs.push(baseRecord({ takenAt, seq: i + 1, reaction: true, original: await canvasToBlob(r.frames[i]), reason: '놀람 장면' }));
+    if (video) recs.push(baseRecord({ takenAt, kind: 'video', ext: /mp4/.test(r.mime) ? 'mp4' : 'webm', reaction: true, original: video, reason: '놀람 장면' }));
+    if (recs.length) await saveRecords(recs);
+    return recs.length;
+  }
   /** 깜짝 얼굴: 화면 가득 큰 얼굴이 확 다가오며 흔들리고(0.7초) 큰 소리 */
   async function playJumpFace() {
     const v = $('camVideo'), c = $('camGhost');
@@ -714,10 +759,11 @@
     const jump = want && (force === 'jump' || (!force && jumpOn()));
     let shown = false;
     screenGhostWhy = want ? '' : '귀신 없는 조·장소';
+    const react = want ? startReaction(!!force) : null;
     if (jump) {
       clearTimeout(loudTimer);                                               // 큰 소리는 깜짝 얼굴과 함께
       const jumpAt = n * 1000 - 800 - 700;
-      screenGhostTimer2 = setTimeout(() => { cancelAnimationFrame(screenGhostRaf); playJumpFace().then((ok) => { if (ok) shown = true; }); }, jumpAt);
+      screenGhostTimer2 = setTimeout(() => { cancelAnimationFrame(screenGhostRaf); playJumpFace().then((ok) => { if (ok) { shown = true; triggerReaction(react); } }); }, jumpAt);
     }
     if (want) {
       // 귀신은 카운트다운 1초쯤 나타나 약 1초 머문다 (나타남·사라짐 0.6초 포함 1.5~1.8초). 준비가 늦으면 남은 시간만큼 줄이되 0.6초 미만이면 안 띄움
@@ -729,11 +775,12 @@
         const wait = Math.max(0, start + appearAt - performance.now());
         const hold = Math.min(900 + Math.random() * 300, start + room - performance.now() - wait - 600);
         if (hold < 600) { screenGhostWhy = '준비가 늦어 건너뜀'; return; }
-        screenGhostTimer = setTimeout(() => { shown = true; playScreenGhost(p, hold); }, wait);
+        screenGhostTimer = setTimeout(() => { shown = true; playScreenGhost(p, hold); if (!jump) triggerReaction(react); }, wait);
       }).catch((e) => { screenGhostWhy = e.message; });
     }
     await countdown(n, 1000);
     stopScreenGhost();
+    if (react) await finishReaction(react).catch(() => 0);
     return shown;
   }
   async function countdown(n, step) {
@@ -1248,7 +1295,7 @@
       const d = document.createElement('div'); d.className = 'gitem';
       const t = new Date(r.takenAt);
       const media = r.kind === 'video' ? `<video src="${u}#t=0.5" muted preload="metadata"></video>` : `<img src="${u}" alt="">`;
-      const info = (r.kind === 'video' ? '🎬 ' : '') + (r.seq ? `#${r.seq} ` : '') +
+      const info = (r.reaction ? '😱 놀람 ' : '') + (r.kind === 'video' ? '🎬 ' : '') + (r.seq ? `#${r.seq} ` : '') +
         (r.timeMs ? `${(r.timeMs / 1000).toFixed(1)}초 ` : '') + (r.count != null ? `공 ${r.count}개 ` : '');
       d.innerHTML = `${media}<div>${r.group}조 · ${esc(r.stationName)} · ${pad(t.getHours())}:${pad(t.getMinutes())} ${info}<br>` +
         `${r.ghost ? '<span class="badge g">★ 수정</span>' : ''}${r.needsEdit ? '<span class="badge w">수정 대기</span>' : ''}${r.remoteEdit ? '<span class="badge g">노트북 수정</span>' : ''}${needsUpload(r) ? '<span class="badge w">대기</span>' : '<span class="badge u">올림</span>'}</div>`;

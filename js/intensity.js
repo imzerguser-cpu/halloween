@@ -11,14 +11,14 @@
   ];
   const DEF = {
     '귀신수_너무': '0', '귀신수_조금': '1', '귀신수_안무서움': '2',
-    '은은한소리_너무': '아니오', '은은한소리_조금': '아니오', '은은한소리_안무서움': '예',
+    '은은한소리_너무': '예', '은은한소리_조금': '예', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
     '깜짝얼굴_너무': '아니오', '깜짝얼굴_조금': '아니오', '깜짝얼굴_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
-    '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면'
+    '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '연사'
   };
   function get(st, k) {
     st = st || {};
@@ -55,6 +55,8 @@
     photoOnly: (st) => get(st, '촬영방식') === '사진',
     /** 빈 배경이 맞지 않으면(들고 찍은 사진) 어두운 곳에 귀신을 자유 배치 */
     freeGhost: (st) => yes(get(st, '자유배치')),
+    /** 귀신이 나온 순간 학생 반응 찍기: 끔 · 연사(5장) · 영상 · 둘다 */
+    reactMode: (st) => (['끔', '연사', '영상', '둘다'].includes(get(st, '놀람촬영')) ? get(st, '놀람촬영') : '연사'),
     /** 귀신 보이는 방법: 화면 · 사진 · 둘다 */
     ghostView: (st) => (['화면', '사진', '둘다'].includes(get(st, '귀신보기')) ? get(st, '귀신보기') : '화면'),
     /** 이번 행사에서 쓰지 않는 장소 id */
@@ -120,6 +122,10 @@
   <div class="int-row"><span>귀신 보이는 방법</span>
     ${[['화면', '카메라 화면에만 1초쯤 (찍힌 사진은 그대로)'], ['사진', '찍힌 사진에만 (수정본)'], ['둘다', '화면에도, 사진에도']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-gview" value="${v}"${api.ghostView(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
+  <div class="int-row"><span>놀라는 장면 찍기</span>
+    ${[['끔', '안 찍기'], ['연사', '사진 5장 연사'], ['영상', '영상 (카운트다운 동안)'], ['둘다', '연사 + 영상']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-react" value="${v}"${api.reactMode(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
+  </div>
+  <p class="int-help">화면에 귀신(깜짝 얼굴을 켠 조는 깜짝 얼굴)이 나온 순간 학생들 모습을 몰래 찍어 원본으로 저장합니다(파일 이름에 "놀람"). 학생 화면에는 보여 주지 않습니다. 영상은 소리도 담으려고 마이크 권한을 물을 수 있어요.</p>
   <div class="int-row"><span>귀신 넣는 방법</span>
     <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 어두운 곳에 귀신 그림을 자동으로 놓기 (화면 귀신은 늘 이 방식)</label>
   </div>
@@ -164,6 +170,7 @@
         const vc = el.querySelector('input[name="int-voice"]:checked'); if (vc) o['나레이션방식'] = vc.value;
         const sh = el.querySelector('input[name="int-shot"]:checked'); if (sh) o['촬영방식'] = sh.value;
         const gv = el.querySelector('input[name="int-gview"]:checked'); if (gv) o['귀신보기'] = gv.value;
+        const rc = el.querySelector('input[name="int-react"]:checked'); if (rc) o['놀람촬영'] = rc.value;
         const use = el.querySelectorAll('input[data-use]');
         if (use.length) o['쉬는장소'] = [...use].filter((c) => !c.checked).map((c) => c.dataset.use).join(',');
         return o;
