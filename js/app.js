@@ -582,7 +582,15 @@
     $('btnOpenCam').textContent = TYPE[t].btn;
     show('scrMission');
   }
+  // 칠판 신호: 이 장소의 전자칠판(board.html)이 분필 글씨를 쓰게 한다 (기다리지 않음)
+  function sendCue(kind) {
+    const s = station();
+    if (!s || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return;
+    fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: conf.apiKey, action: 'cue', station: s.id, group: cur.group, fear: teamFear(cur.group), kind }) }).catch(() => {});
+  }
   function startStudentCamera() {
+    sendCue('camera');
     const t = stType();
     openCamera(t === '스태킹' || t === '탁구공' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
   }

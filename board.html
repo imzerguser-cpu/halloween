@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>칠판</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Malgun Gothic',sans-serif;color:#eee;user-select:none;-webkit-user-select:none}
+  #board{position:fixed;inset:0;background:#000;transition:background 1.2s ease}
+  #board.on{background:radial-gradient(ellipse at 50% 40%,#1f3329 0%,#14231b 55%,#0c150f 100%)}
+  #board.flicker{animation:flick .5s steps(2) 2}
+  @keyframes flick{0%{filter:brightness(.2)}50%{filter:brightness(1.4)}100%{filter:brightness(.6)}}
+  #grain{position:fixed;inset:0;opacity:0;transition:opacity 1.2s;pointer-events:none;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.015) 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,rgba(255,255,255,.012) 0 1px,transparent 1px 4px)}
+  #board.on #grain{opacity:1}
+  #text{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;font-family:'Nanum Pen Script','Malgun Gothic',cursive;color:#f2f2ea;font-size:15vh;line-height:1.05;text-shadow:0 0 2px #fff8,0 0 10px #ffffff33,1px 1px 0 #ffffff40;transition:opacity 1.6s ease,filter 1.6s ease;pointer-events:none}
+  #text.erase{opacity:0;filter:blur(6px)}
+  .line{white-space:nowrap}
+  .ch{display:inline-block;opacity:0;transform:translateY(.05em) rotate(-2deg) scale(.96);transition:opacity .12s,transform .18s}
+  .ch.in{opacity:1;transform:none}
+  #setup{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b0b10;padding:16px}
+  #setup[hidden]{display:none}
+  .card{width:min(520px,100%);background:#181b22;border:1px solid #2e3240;border-radius:14px;padding:22px}
+  .card h1{font-size:22px;margin:0 0 6px;color:#ffcf7a}.card p{font-size:14px;color:#a9aec0;margin:6px 0 14px;line-height:1.5}
+  .card label{display:block;font-size:14px;color:#c3c7d4;margin:12px 0 4px}
+  .card input,.card select{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:16px}
+  .row{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  button{border:none;border-radius:9px;padding:11px 16px;font-weight:700;font-size:15px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408}
+  button.sub{background:#252935;color:#e8eaf0}
+  #msg{font-size:13px;margin-top:10px;min-height:18px}
+  #hot{position:fixed;left:0;top:0;width:90px;height:90px;z-index:5}
+</style>
+</head>
+<body>
+<div id="board"><div id="grain"></div></div>
+<div id="text"></div>
+<div id="hot"></div>
+<div id="setup">
+  <div class="card">
+    <h1>🧑‍🏫 칠판 화면 준비</h1>
+    <p>전자칠판에서 이 화면을 열어 두면, 정한 장소의 태블릿에서 학생들이 인증샷 카메라를 켤 때 검은 칠판에 분필 글씨가 저절로 써집니다. 시작하면 화면이 꺼진 것처럼 검게 바뀌어요. 다시 설정하려면 왼쪽 위 모서리를 빠르게 5번 누르세요.</p>
+    <label>비밀 키 (태블릿과 같은 값)</label>
+    <input id="key" type="password" autocomplete="off">
+    <label>이 칠판이 있는 장소</label>
+    <select id="station"></select>
+    <div class="row">
+      <button id="start">칠판 시작 (전체 화면)</button>
+      <button class="sub" id="test">글씨 시험해 보기</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+</div>
+<script src="js/tour.js?v=20261014002529"></script>
+<script>
+(function () {
+  'use strict';
+  const API = (new URLSearchParams(location.search).get('api')) || 'https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec';
+  const $ = (id) => document.getElementById(id);
+  const LS = 'hg_board';
+  const read = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { return {}; } };
+  const write = (o) => { try { localStorage.setItem(LS, JSON.stringify(o)); } catch (e) {} };
+  let conf = read(), settings = {}, lastT = 0, busy = false, pollTimer = null, wake = null, actx = null;
+  // 무서움 단계별 기본 글씨 (시트 설정 탭 "칠판문구_너무/조금/안무서움" 에 / 로 줄을 나눠 적으면 그 글이 우선)
+  const DEF = [['안녕?', '같이 놀자 :)'], ['같이 놀자'], ['같이 놀자', '너도 여기 남아']];
+  const LV = ['너무', '조금', '안무서움'];
+
+  (window.HG_TOUR ? HG_TOUR.PLACES : [{ id: 'class1', name: '1학년 교실' }]).forEach((p) => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; $('station').appendChild(o);
+  });
+  $('station').value = conf.station || 'class1';
+  $('key').value = conf.key || '';
+  const msg = (t, bad) => { $('msg').textContent = t; $('msg').style.color = bad ? '#ff9aa8' : '#9ce6b4'; };
+
+  async function get(action, extra) {
+    const u = API + '?action=' + action + '&key=' + encodeURIComponent(conf.key || '') + (extra || '');
+    const r = await fetch(u, { cache: 'no-store' });
+    return r.json();
+  }
+  function linesFor(fear) {
+    const lv = fear === 0 || fear === 1 || fear === 2 ? fear : 0;            // 1·2학년·모르는 조는 가장 순한 글
+    const custom = String(settings['칠판문구_' + LV[lv]] || '').trim();
+    return custom ? custom.split('/').map((s) => s.trim()).filter(Boolean) : DEF[lv];
+  }
+  // 분필 긁는 소리 (짧은 잡음)
+  function chalk() {
+    if (!actx) return;
+    try {
+      const n = actx.createBufferSource(), len = actx.sampleRate * 0.09, buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      n.buffer = buf;
+      const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2400 + Math.random() * 1600; f.Q.value = 2;
+      const g = actx.createGain(); g.gain.value = 0.18;
+      n.connect(f); f.connect(g); g.connect(actx.destination); n.start();
+    } catch (e) {}
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function write_(lines) {
+    if (busy) return; busy = true;
+    const board = $('board'), text = $('text');
+    text.classList.remove('erase'); text.innerHTML = '';
+    await sleep(900);
+    board.classList.add('on', 'flicker'); setTimeout(() => board.classList.remove('flicker'), 1000);
+    await sleep(1300);
+    for (const line of lines) {
+      const el = document.createElement('div'); el.className = 'line'; text.appendChild(el);
+      for (const c of line) {
+        const s = document.createElement('span'); s.className = 'ch'; s.textContent = c === ' ' ? ' ' : c; el.appendChild(s);
+        await sleep(20); s.classList.add('in'); if (c.trim()) chalk();
+        await sleep(c.trim() ? 260 + Math.random() * 220 : 120);
+      }
+      await sleep(500);
+    }
+    await sleep(5500);
+    text.classList.add('erase');
+    await sleep(1700);
+    board.classList.remove('on');
+    await sleep(1300);
+    text.innerHTML = ''; text.classList.remove('erase');
+    busy = false;
+  }
+  async function poll() {
+    try {
+      const j = await get('cue', '&station=' + encodeURIComponent(conf.station));
+      if (j && j.ok && j.cue && j.cue.t > lastT) {
+        const fresh = (j.now || Date.now()) - j.cue.t < 20000;
+        const first = lastT === 0;
+        lastT = j.cue.t;
+        if (fresh && !first) write_(linesFor(j.cue.fear));
+      } else if (j && j.ok && lastT === 0) lastT = 1;
+    } catch (e) { /* 와이파이가 잠깐 끊겨도 계속 */ }
+    pollTimer = setTimeout(poll, 2000);
+  }
+  async function begin() {
+    conf = { key: $('key').value.trim(), station: $('station').value };
+    if (!conf.key) return msg('비밀 키를 넣어 주세요', true);
+    msg('연결 확인 중...');
+    try {
+      const j = await get('roster');
+      if (!j.ok) return msg(j.error === 'key' ? '비밀 키가 맞지 않아요' : '연결 실패', true);
+      settings = j.settings || {};
+    } catch (e) { return msg('연결 실패: 인터넷을 확인하세요', true); }
+    write(conf);
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+    try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) {}
+    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    $('setup').hidden = true;
+    clearTimeout(pollTimer); lastT = 0; poll();
+    setInterval(async () => { try { const j = await get('roster'); if (j.ok) settings = j.settings || {}; } catch (e) {} }, 60000);
+  }
+  $('start').onclick = begin;
+  $('test').onclick = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {} write_(linesFor(2)); };
+  document.addEventListener('visibilitychange', async () => { if (!document.hidden && navigator.wakeLock && $('setup').hidden) { try { wake = await navigator.wakeLock.request('screen'); } catch (e) {} } });
+  let taps = 0, tapT = null;
+  $('hot').onclick = () => { taps++; clearTimeout(tapT); tapT = setTimeout(() => { taps = 0; }, 2500); if (taps >= 5) { taps = 0; clearTimeout(pollTimer); $('setup').hidden = false; } };
+})();
+</script>
+</body>
+</html>
