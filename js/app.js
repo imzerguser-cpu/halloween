@@ -554,12 +554,29 @@
   const reactMode = () => (window.Intensity ? Intensity.reactMode(cache.settings) : '끔');
   const wantGhostHere = () => { const s = station(); return !!(s.ghost && ghostStationsFor(cur.group).includes(s.id)); };
 
+  // 장소 안내 사진: places/<장소id>.jpg (밝을 때 찍은 사진). 없으면 숨김
+  function showPlaceImg(img, id, box) {
+    const wrap = box || img;
+    wrap.hidden = true;
+    if (!id) { img.removeAttribute('src'); return; }
+    const mark = (on) => { if (img.id === 'resNextImg') $('scrResult').classList.toggle('has-next', on); };
+    mark(false);
+    img.onload = () => { wrap.hidden = false; mark(true); };
+    img.onerror = () => { wrap.hidden = true; mark(false); };
+    img.src = 'places/' + encodeURIComponent(id) + '.jpg';
+  }
+  function nextStationOf(s) {
+    const off = window.Intensity ? Intensity.offIds(cache.settings) : [];
+    const used = cache.stations.filter((x) => !off.includes(x.id)), i = used.findIndex((x) => x.id === s.id);
+    return i >= 0 && i < used.length - 1 ? used[i + 1] : null;
+  }
   function openMission() {
     const s = station(), t = stType();
     stopNarration();
     $('misStory').hidden = true;
     $('misStation').textContent = tourOn() ? '📸 ' + s.name + ' 인증샷' : '🎯 ' + s.name + ' 미션';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
+    showPlaceImg($('misPlace'), s.id, $('misPlaceFig'));
     $('misGroup').textContent = cur.group + '조';
     $('misLead').textContent = tourOn() ? '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!' : TYPE[t].lead;
     $('btnOpenCam').textContent = TYPE[t].btn;
@@ -1145,6 +1162,9 @@
     const s = station();
     $('resClue').hidden = !(success && s.clue);
     $('resClueText').textContent = s.clue || '';
+    $('resClueLabel').textContent = tourOn() ? '🧭 다음 장소 — 이곳을 찾아가요' : '🔑 단서';
+    const nx = success ? nextStationOf(s) : null;
+    showPlaceImg($('resNextImg'), nx && nx.id);
     $('btnDone').hidden = !success;           // 성공해야 완료 가능
     $('btnRetake').hidden = !decided;         // 탁구공은 개수를 고른 뒤에 버튼 표시
     $('btnRetake').textContent = success ? '🔄 다시 찍기' : '🔄 다시 도전!';

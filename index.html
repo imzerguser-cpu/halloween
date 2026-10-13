@@ -52,6 +52,8 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 #scrCamera{background:#000;position:fixed;inset:0;min-height:0;z-index:20}
 #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
 #camVideo.mirror{transform:scaleX(-1)}
+.place-fig{margin:4px auto 6px;text-align:center}.place-fig img{display:block;margin:0 auto;max-height:30vh;max-width:100%;border-radius:14px;border:3px solid #ffe4ac;box-shadow:0 6px 20px #0008}.place-fig figcaption{font-weight:700;margin-top:6px;color:#ffe4ac;font-size:18px}
+.clue-body{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap}.clue-img{max-height:22vh;max-width:45%;border-radius:12px;border:2px solid #3a2408}
 #btnAdminEnter{position:fixed;right:calc(14px + env(safe-area-inset-right));bottom:calc(64px + env(safe-area-inset-bottom));z-index:30;border:1px solid #ffffff59;background:#00000080;color:#ffffffd9;border-radius:999px;padding:9px 15px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer}
 #camGhost{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
 #camGhost.mirror{transform:scaleX(-1)}
@@ -216,6 +218,7 @@ button{touch-action:manipulation}
 #scrTeam #teamDone :is(.hd-sub,.names,.next-team,.lead){color:#493253}
 #scrResult .photo-box{border:6px solid #fff1d9;border-radius:20px;transform:none;box-shadow:0 8px 28px #10092366}
 #scrResult :is(.photo-box img,#resVideo){max-height:42vh}
+#scrResult.has-next :is(.photo-box img,#resVideo){max-height:20vh}#scrResult.has-next .clue{margin-top:10px;padding-top:10px;padding-bottom:10px}#scrResult.has-next .clue-img{max-height:26vh;max-width:55%}#scrResult.has-next .big-title{margin-bottom:2px}
 #scrResult .burst-grid{gap:12px}
 #scrResult .burst-grid img{border:4px solid #fff1d9;border-radius:14px}
 #scrResult .count-card{max-width:760px}
@@ -428,6 +431,7 @@ button{touch-action:manipulation}
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
     <div class="story-card" id="misStory" hidden><div class="story-title" id="misStoryTitle"></div><div class="story-text" id="misStoryText"></div></div>
     <h2 class="big-title" id="misStation">🎯 미션</h2>
+    <figure class="place-fig" id="misPlaceFig" hidden><img id="misPlace" alt="찍을 곳"><figcaption>📍 여기서 찍어요</figcaption></figure>
     <div class="parch" style="margin:14px 0 22px"><div class="mission-text" id="misText"></div></div>
     <p class="lead" id="misLead">미션을 성공한 순간을 사진으로 남겨요!</p>
     <div class="row center">
@@ -485,7 +489,7 @@ button{touch-action:manipulation}
       <div class="row center" id="resCountBtns"></div>
       <p class="hd-sub" style="text-align:center;margin-top:8px">영상이 증거로 남아요. 정직하게 눌러 주세요!</p>
     </div>
-    <div class="parch clue" id="resClue" hidden><div class="clue-label">🔑 단서</div><div class="mission-text" id="resClueText"></div></div>
+    <div class="parch clue" id="resClue" hidden><div class="clue-label" id="resClueLabel">🔑 단서</div><div class="clue-body"><img id="resNextImg" class="clue-img" alt="다음 장소" hidden><div class="mission-text" id="resClueText"></div></div></div>
     <div class="row center" style="margin-top:26px">
       <button class="btn ghost" id="btnRetake">🔄 다시 찍기</button>
       <button class="btn" id="btnDone">✅ 미션 완료</button>
@@ -644,13 +648,13 @@ button{touch-action:manipulation}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
-<script src="js/ghost-engine.js" defer></script>
-<script src="js/ghost-free.js" defer></script>
-<script src="js/sfx.js" defer></script>
-<script src="js/intensity.js" defer></script>
-<script src="js/stories.js" defer></script>
-<script src="js/tour.js" defer></script>
-<script src="js/story-editor.js" defer></script>
-<script src="js/app.js" defer></script>
+<script src="js/ghost-engine.js?v=20261014002251" defer></script>
+<script src="js/ghost-free.js?v=20261014002251" defer></script>
+<script src="js/sfx.js?v=20261014002251" defer></script>
+<script src="js/intensity.js?v=20261014002251" defer></script>
+<script src="js/stories.js?v=20261014002251" defer></script>
+<script src="js/tour.js?v=20261014002251" defer></script>
+<script src="js/story-editor.js?v=20261014002251" defer></script>
+<script src="js/app.js?v=20261014002251" defer></script>
 </body>
 </html>
