@@ -57,9 +57,10 @@
 
   // ---------- 불러오기 ----------
   // 나레이션 미리 듣기 (노트북)
-  let previewAudio = null;
+  let previewAudio = null, previewToken = 0;
   function stopPreview() {
-    try { speechSynthesis.cancel(); } catch (e) {}
+    previewToken++;                                                         // 받아 오는 중이던 음성은 도착해도 재생하지 않음
+    try { speechSynthesis.pause(); speechSynthesis.cancel(); setTimeout(() => { try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch (e) {} }, 60); } catch (e) {}
     if (previewAudio) { try { previewAudio.pause(); } catch (e) {} previewAudio = null; }
   }
   function speakWeb(text, lv) {
@@ -90,13 +91,15 @@
         if (!text) return { error: '읽을 문구가 없어요' };
         const how = o['나레이션방식'] || roster.settings['나레이션방식'] || '태블릿';
         stopPreview();
+        const token = previewToken;
         if (how !== '태블릿') {
           try {
             const j = await post({ action: 'tts', provider: how, level: lv, text: text.replace(/[「」📜😊]/g, '') });
+            if (token !== previewToken) return { error: '멈췄어요' };
             previewAudio = new Audio(URL.createObjectURL(b64ToBlob(j.data, j.mime || 'audio/mpeg')));
             await previewAudio.play();
             return { how };
-          } catch (e) { speakWeb(text, lv); return { error: how + ' 실패 → 노트북 음성으로 읽었어요: ' + e.message }; }
+          } catch (e) { if (token !== previewToken) return { error: '멈췄어요' }; speakWeb(text, lv); return { error: how + ' 실패 → 노트북 음성으로 읽었어요: ' + e.message }; }
         }
         speakWeb(text, lv);
         return { how: '노트북 기본 음성' };

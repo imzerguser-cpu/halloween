@@ -482,11 +482,20 @@
     u.rate = Math.max(0.5, Math.min(1.5, base * [1.0, 0.88, 0.78][lv]));
     u.pitch = [1.0, 0.85, 0.65][lv];
     u.volume = 1;
+    try { speechSynthesis.resume(); } catch (e) {}
     speechSynthesis.speak(u);
+  }
+  // 안드로이드 크롬은 cancel 한 번으로 말하던 문장이 안 멈출 때가 있어 pause → cancel → 잠시 뒤 다시 cancel
+  function hushSpeech() {
+    if (!('speechSynthesis' in window)) return;
+    const s = speechSynthesis;
+    try { s.pause(); s.cancel(); } catch (e) {}
+    setTimeout(() => { try { s.cancel(); s.resume(); } catch (e) {} }, 60);
+    setTimeout(() => { try { if (s.speaking) s.cancel(); } catch (e) {} }, 300);
   }
   function stopNarration() {
     narrToken++;
-    try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+    hushSpeech();
     if (narrAudio) { try { narrAudio.pause(); URL.revokeObjectURL(narrAudio.src); } catch (e) {} narrAudio = null; }
   }
   if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { if (!$('scrAdmin').hidden) renderVoices(); };
