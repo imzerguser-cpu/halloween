@@ -27,7 +27,7 @@
   async function post(body) {
     const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, ...body }) });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || '응답 오류');
+    if (!j.ok) throw new Error(j.error === 'key' ? '비밀 키가 맞지 않아요. 연결 탭에서 비밀 키를 다시 넣어 주세요' : (j.error || '응답 오류'));
     return j;
   }
   function chip(id, text, cls) { const c = $(id); c.textContent = text; c.className = 'chip' + (cls ? ' ' + cls : ''); }
