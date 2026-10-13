@@ -94,13 +94,13 @@
     return pick;
   }
 
-  /** 사진(canvas)에 귀신을 얹는다 → { blob, applied, reason, file } */
-  async function composite(photo, lib, opts) {
+  /** 귀신 자리와 그 빛에 맞춘 귀신 그림을 만든다 → { layer, gx, gy, alpha, mask, file } 또는 { reason } */
+  async function plan(photo, lib, opts) {
     opts = opts || {};
     const rnd = opts.random || Math.random;
-    if (!lib || !lib.ghosts || !lib.ghosts.length) return { blob: null, applied: false, reason: 'free-no-ghosts' };
+    if (!lib || !lib.ghosts || !lib.ghosts.length) return { reason: 'free-no-ghosts' };
     let mask = null;
-    if (window.GhostEngine && GhostEngine.utils && GhostEngine.utils.personMask) {
+    if (opts.mask !== false && window.GhostEngine && GhostEngine.utils && GhostEngine.utils.personMask) {
       try { await GhostEngine.init({ base: opts.base || './' }); mask = await GhostEngine.utils.personMask(photo); } catch (e) { mask = null; }
     }
     const a = analyse(photo, mask);
@@ -108,7 +108,7 @@
     const pool = (pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
     let g = null, spot = null;
     for (const cand of pool) { spot = place(a, cand, rnd); if (spot) { g = cand; break; } }
-    if (!spot) return { blob: null, applied: false, reason: 'free-no-dark-spot' };
+    if (!spot) return { reason: 'free-no-dark-spot' };
 
     const sx = photo.width / a.W, sy = photo.height / a.H;
     const gx = spot.x * sx, gy = spot.y * sy, gw = spot.w * sx, gh = spot.h * sy;
@@ -141,10 +141,18 @@
       px[k] = clamp(px[k] + e, 0, 255); px[k + 1] = clamp(px[k + 1] + e, 0, 255); px[k + 2] = clamp(px[k + 2] + e, 0, 255);
     }
     lx.putImageData(id, 0, 0);
+    return { layer, gx, gy, alpha: 0.38 + rnd() * 0.17, mask, file: g.file, box: [gx, gy, gw, gh].map(Math.round) };
+  }
 
+  /** 사진(canvas)에 귀신을 얹는다 → { blob, applied, reason, file } */
+  async function composite(photo, lib, opts) {
+    opts = opts || {};
+    const p = await plan(photo, lib, opts);
+    if (!p.layer) return { blob: null, applied: false, reason: p.reason };
+    const { layer, gx, gy, mask } = p;
     const out = canvas(photo.width, photo.height), ox = out.getContext('2d');
     ox.drawImage(photo, 0, 0);
-    ox.globalAlpha = 0.38 + rnd() * 0.17;
+    ox.globalAlpha = p.alpha;
     ox.drawImage(layer, gx, gy);
     ox.globalAlpha = 1;
     if (mask) {                                                          // 사람은 귀신보다 앞에
@@ -154,8 +162,8 @@
       ox.drawImage(front, 0, 0);
     }
     const blob = await new Promise((res) => out.toBlob(res, 'image/jpeg', opts.quality || 0.92));
-    return { blob, applied: !!blob, reason: blob ? '' : 'free-encode-failed', file: g.file, box: [gx, gy, gw, gh].map(Math.round) };
+    return { blob, applied: !!blob, reason: blob ? '' : 'free-encode-failed', file: p.file, box: p.box };
   }
 
-  window.GhostFree = { load, composite };
+  window.GhostFree = { load, plan, composite };
 })();

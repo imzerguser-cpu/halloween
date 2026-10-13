@@ -17,7 +17,7 @@
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
-    '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': ''
+    '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면'
   };
   function get(st, k) {
     st = st || {};
@@ -52,6 +52,8 @@
     photoOnly: (st) => get(st, '촬영방식') === '사진',
     /** 빈 배경이 맞지 않으면(들고 찍은 사진) 어두운 곳에 귀신을 자유 배치 */
     freeGhost: (st) => yes(get(st, '자유배치')),
+    /** 귀신 보이는 방법: 화면 · 사진 · 둘다 */
+    ghostView: (st) => (['화면', '사진', '둘다'].includes(get(st, '귀신보기')) ? get(st, '귀신보기') : '화면'),
     /** 이번 행사에서 쓰지 않는 장소 id */
     offIds: (st) => String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean),
 
@@ -110,10 +112,13 @@
 
   <div class="int-row"><span>촬영 방법</span>
     <label class="int-chk"><input type="radio" name="int-shot" value="미션대로"${get(st, '촬영방식') !== '사진' ? ' checked' : ''}> 미션대로 (스태킹·탁구공은 영상, 동상은 연속사진)</label>
-    <label class="int-chk"><input type="radio" name="int-shot" value="사진"${get(st, '촬영방식') === '사진' ? ' checked' : ''}> 모든 장소 사진 인증샷 (태블릿을 들고 플래시로 찍기)</label>
+    <label class="int-chk"><input type="radio" name="int-shot" value="사진"${get(st, '촬영방식') === '사진' ? ' checked' : ''}> 모든 장소 사진 인증샷 (5초 카운트다운 뒤 찰칵)</label>
+  </div>
+  <div class="int-row"><span>귀신 보이는 방법</span>
+    ${[['화면', '카메라 화면에만 1초쯤 (찍힌 사진은 그대로)'], ['사진', '찍힌 사진에만 (수정본)'], ['둘다', '화면에도, 사진에도']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-gview" value="${v}"${api.ghostView(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
   <div class="int-row"><span>귀신 넣는 방법</span>
-    <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 사진의 어두운 곳에 귀신 그림을 자동으로 넣기</label>
+    <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 어두운 곳에 귀신 그림을 자동으로 놓기 (화면 귀신은 늘 이 방식)</label>
   </div>
   ${stations && stations.length ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
     ${stations.map((s) => `<label class="int-chk"><input type="checkbox" data-use="${esc(s.id)}"${api.offIds(st).includes(s.id) ? '' : ' checked'}> ${esc(s.name)}</label>`).join('')}
@@ -155,6 +160,7 @@
         const pk = el.querySelector('input[name="int-pick"]:checked'); if (pk) o['조선정'] = pk.value;
         const vc = el.querySelector('input[name="int-voice"]:checked'); if (vc) o['나레이션방식'] = vc.value;
         const sh = el.querySelector('input[name="int-shot"]:checked'); if (sh) o['촬영방식'] = sh.value;
+        const gv = el.querySelector('input[name="int-gview"]:checked'); if (gv) o['귀신보기'] = gv.value;
         const use = el.querySelectorAll('input[data-use]');
         if (use.length) o['쉬는장소'] = [...use].filter((c) => !c.checked).map((c) => c.dataset.use).join(',');
         return o;
