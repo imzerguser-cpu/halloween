@@ -429,17 +429,19 @@
   const ttsKey = (prov, lv, text) => {
     const pre = { 'Google': '구글', 'Azure': '애저', '클로바': '클로바' }[prov] || '';
     return [prov, lv, setting(TTS_VOICE_KEY[prov] + FEAR_KEY[lv], ''), setting('나레이션목소리', ''),
-      pre ? setting(pre + '속도_' + FEAR_KEY[lv], '') : '', pre ? setting(pre + '높이_' + FEAR_KEY[lv], '') : '', text].join('|');
+      pre ? setting(pre + '속도_' + FEAR_KEY[lv], '') : '', pre ? setting(pre + '높이_' + FEAR_KEY[lv], '') : '',
+      prov === 'ElevenLabs' ? 'scary-v1:' + setting('나레이션모델', 'eleven_multilingual_v2') : '', text].join('|');
   };
-  async function ttsClip(text, lv) {
-    const prov = ttsProvider(); if (!prov) return null;
-    const k = ttsKey(prov, lv, text);
+  async function ttsClip(text, lv, previewVoice) {
+    const prov = previewVoice ? 'ElevenLabs' : ttsProvider(); if (!prov) return null;
+    const k = previewVoice ? ['ElevenLabs', 'scary-v1', 'eleven_multilingual_v2', previewVoice, lv, text].join('|') : ttsKey(prov, lv, text);
     const hit = await ttsDb.get(k).catch(() => null); if (hit) return hit;
     if (!conf.apiUrl || !conf.apiKey || !navigator.onLine) return null;
     const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ key: conf.apiKey, action: 'tts', provider: prov, level: lv, text }) });
+      body: JSON.stringify({ key: conf.apiKey, action: 'tts', provider: prov, level: lv, text, ...(previewVoice ? { previewVoice } : {}) }) });
     const j = await r.json();
     if (!j.ok) { ttsError = j.error + (j.detail ? ' ' + j.detail : ''); return null; }
+    if (previewVoice && (j.voice !== previewVoice || j.preview !== true)) throw new Error('Code.gs를 새 버전으로 배포한 뒤 다시 시험하세요.');
     const bin = atob(j.data), u8 = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     const blob = new Blob([u8], { type: j.mime || 'audio/mpeg' });
@@ -477,8 +479,8 @@
     const v = pickVoice(lv0); if (v) u.voice = v;
     const lv = opts && opts.level != null ? opts.level : storyLevel();
     const base = parseFloat(setting('나레이션속도', '0.95')) || 0.95;
-    u.rate = Math.max(0.5, Math.min(1.5, base * [1.05, 0.95, 0.85][lv]));
-    u.pitch = [1.1, 0.95, 0.75][lv];
+    u.rate = Math.max(0.5, Math.min(1.5, base * [1.0, 0.88, 0.78][lv]));
+    u.pitch = [1.0, 0.85, 0.65][lv];
     u.volume = 1;
     speechSynthesis.speak(u);
   }
@@ -1239,7 +1241,13 @@
       stationCount: ghostStations().length,
       stations: cache.stations,
       onStop: stopNarration,
+      samplePreview: true,
       onPreview: async (o, lv, which) => {
+        if (which === 'sample') {
+          ttsError = '';
+          const clip = await ttsClip(o.text, lv, o.previewVoice);
+          return clip ? { clip } : { error: ttsError || '구글 시트 연결과 인터넷 상태를 확인하세요.' };
+        }
         const s = station();
         const text = which === 'station' && s ? (function () {
           const def = storyDef(s);
