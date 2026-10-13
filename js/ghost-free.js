@@ -68,21 +68,24 @@
   }
 
   /** 귀신 하나를 놓을 자리: 어둡고, 사람과 안 겹치고, 가장자리에 너무 붙지 않은 곳 */
-  function place(a, g, rnd) {
-    const range = g.height || KIND_H[g.kind] || KIND_H.full;
+  // 셀카 화면: 얼굴 귀신을 학생 얼굴만 하게(화면 높이 40~55%), 학생 옆·뒤에서 들여다보듯
+  const SELFIE_H = [0.4, 0.55];
+  function place(a, g, rnd, selfie) {
+    const range = selfie ? SELFIE_H : g.height || KIND_H[g.kind] || KIND_H.full;
     const best = [];
     for (const f of [1, 0.85, 0.7]) {
       const h = Math.round(a.H * (range[0] + (range[1] - range[0]) * rnd()) * f), w = Math.max(4, Math.round(h * g.image.width / g.image.height));
-      if (w >= a.W * 0.6 || h >= a.H * 0.9) continue;
-      const step = 3, yMin = g.kind === 'full' ? Math.round(a.H * 0.12) : Math.round(a.H * 0.04);
+      if (w >= a.W * (selfie ? 0.75 : 0.6) || h >= a.H * 0.9) continue;
+      const step = 3, yMin = g.kind === 'full' ? Math.round(a.H * 0.12) : Math.round(a.H * (selfie ? 0.02 : 0.04));
       for (let y = yMin; y + h <= a.H - 2; y += step) for (let x = 2; x + w <= a.W - 2; x += step) {
         if (g.kind === 'full' && y + h < a.H * 0.5) continue;              // 서 있는 귀신은 발이 화면 아래쪽에
-        if (g.kind !== 'full' && y + h > a.H * 0.6) continue;              // 얼굴·상반신은 창문 높이(화면 위쪽)에
+        if (!selfie && g.kind !== 'full' && y + h > a.H * 0.6) continue;   // 얼굴·상반신은 창문 높이(화면 위쪽)에
+        if (selfie && y > a.H * 0.35) continue;                              // 셀카: 얼굴이 학생 얼굴 높이쯤
         const p = a.person(x, y, w, h);
-        if (p > 0.02) continue;
+        if (p > (selfie ? 0.35 : 0.02)) continue;                            // 셀카: 학생 뒤에 조금 가려져도 됨
         const m = a.mean(x, y, w, h);
-        const cx = (x + w / 2) / a.W, edge = cx < 0.12 || cx > 0.88 ? 0.04 : 0;
-        best.push({ x, y, w, h, m, score: m + edge + p * 3 });
+        const cx = (x + w / 2) / a.W, edge = !selfie && (cx < 0.12 || cx > 0.88) ? 0.04 : 0;
+        best.push({ x, y, w, h, m, score: m + edge + p * (selfie ? 0.6 : 3) });
       }
       if (best.length) break;
     }
@@ -90,7 +93,7 @@
     best.sort((p, q) => p.score - q.score);
     const top = best[0], pool = best.filter((b) => b.score <= top.score + 0.03 && Math.abs(b.x - top.x) + Math.abs(b.y - top.y) > 0).slice(0, 40);
     const pick = pool.length && rnd() < 0.6 ? pool[Math.floor(rnd() * pool.length)] : top;
-    if (pick.m > Math.max(0.42, a.median * 1.05)) return null;       // 어두운 곳이 없으면 넣지 않는다
+    if (pick.m > (selfie ? Math.max(0.6, a.median * 1.2) : Math.max(0.42, a.median * 1.05))) return null;   // 어두운 곳이 없으면 넣지 않는다
     return pick;
   }
 
@@ -104,10 +107,11 @@
       try { await GhostEngine.init({ base: opts.base || './' }); mask = await GhostEngine.utils.personMask(photo); } catch (e) { mask = null; }
     }
     const a = analyse(photo, mask);
+    const faces = opts.selfie ? lib.ghosts.filter((g) => g.kind === 'face') : [];
     const pref = lib.ghosts.filter((g) => g.stations && opts.stationId && g.stations.includes(opts.stationId));
-    const pool = (pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
+    const pool = (faces.length ? faces : pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
     let g = null, spot = null;
-    for (const cand of pool) { spot = place(a, cand, rnd); if (spot) { g = cand; break; } }
+    for (const cand of pool) { spot = place(a, cand, rnd, !!opts.selfie && cand.kind === 'face'); if (spot) { g = cand; break; } }
     if (!spot) return { reason: 'free-no-dark-spot' };
 
     const sx = photo.width / a.W, sy = photo.height / a.H;
@@ -121,11 +125,11 @@
     const blur = Math.max(0.8, photo.width / 1000) * (g.kind === 'face' ? 1 : 1.4) * (opts.visible ? 0.7 : 1);
 
     const layer = canvas(gw, gh), lx = layer.getContext('2d');
-    lx.filter = `grayscale(0.9) brightness(${bright.toFixed(3)}) contrast(0.72) blur(${blur.toFixed(2)}px)`;
+    lx.filter = `grayscale(0.9) brightness(${bright.toFixed(3)}) contrast(${opts.visible ? 1.05 : 0.72}) blur(${blur.toFixed(2)}px)`;   // 화면용은 머리카락이 까맣게 남도록
     lx.drawImage(g.image, 0, 0, gw, gh);
     lx.filter = 'none';
     lx.globalCompositeOperation = 'source-atop';                       // 주변 빛 색으로 물들이기
-    lx.fillStyle = `rgba(${r | 0},${gg | 0},${b | 0},${opts.visible ? 0.15 : 0.38})`; lx.fillRect(0, 0, gw, gh);
+    lx.fillStyle = `rgba(${r | 0},${gg | 0},${b | 0},${opts.visible ? 0.06 : 0.38})`; lx.fillRect(0, 0, gw, gh);
     {                                                                   // 아래쪽(발끝·어깨)은 흐릿하게 사라지게
       lx.globalCompositeOperation = 'destination-out';
       const grad = lx.createLinearGradient(0, gh * (g.kind === 'full' ? 0.78 : 0.6), 0, gh);
@@ -141,6 +145,11 @@
       px[k] = clamp(px[k] + e, 0, 255); px[k + 1] = clamp(px[k + 1] + e, 0, 255); px[k + 2] = clamp(px[k + 2] + e, 0, 255);
     }
     lx.putImageData(id, 0, 0);
+    if (opts.selfie && mask) {                                          // 학생과 겹친 부분은 귀신을 지워 학생 뒤에 있는 것처럼
+      lx.globalCompositeOperation = 'destination-out';
+      lx.drawImage(mask, gx, gy, gw, gh, 0, 0, gw, gh);
+      lx.globalCompositeOperation = 'source-over';
+    }
     return { layer, gx, gy, alpha: 0.38 + rnd() * 0.17, mask, file: g.file, box: [gx, gy, gw, gh].map(Math.round) };
   }
 

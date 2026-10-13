@@ -646,7 +646,7 @@
   async function planScreenGhost() {
     const v = $('camVideo');
     if (!stream || !v.videoWidth) { screenGhostWhy = '카메라 준비 전'; return null; }
-    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id, visible: true });
+    const p = await GhostFree.plan(grabFrame(), await loadFree(), { stationId: (station() || {}).id, visible: true, selfie: camFacing() === 'user' });
     if (!p || !p.layer) { screenGhostWhy = p && p.reason === 'free-no-dark-spot' ? '화면에 어두운 곳이 없음' : (p && p.reason) || '귀신 그림 없음'; return null; }
     return p;
   }
