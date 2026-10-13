@@ -9,21 +9,7 @@
     { key: '조금', label: '😬 조금 무서워요' },
     { key: '안무서움', label: '😎 하나도 안 무서워요' }
   ];
-  // ElevenLabs 공개 /v1/voices의 premade 설명 기준. 한국어 말투는 직접 비교한다.
-  const EL_VOICES = [
-    ['pFZP5JQG7iQjIQuC4Bku', 'Lily · 부드럽고 벨벳 같은 여성 이야기꾼'],
-    ['JBFqnCBsd6RMkjVDRZzb', 'George · 따뜻한 울림의 남성 이야기꾼'],
-    ['N2lVS1w4EtoT3dr4eOWO', 'Callum · 거칠고 불안한 느낌의 허스키 남성'],
-    ['nPczCjzI2devNBz1zQrb', 'Brian · 깊고 울림 있는 편안한 남성'],
-    ['pqHfZKP75CvOlQylNhV4', 'Bill · 나이 든 차분한 남성 이야기꾼'],
-    ['CwhRBWXzGAHq8TQ4Fs17', 'Roger · 여유롭고 울림 있는 남성'],
-    ['XrExE9yKIg1WjnnlVkGX', 'Matilda · 듣기 편한 알토 여성'],
-    ['EXAVITQu4vr4xnSDxMaL', 'Sarah · 안심시키는 따뜻한 여성']
-  ];
-  const EL_DEFAULTS = EL_VOICES.slice(0, 3).map(([id]) => id);
-  const EL_SAMPLE = '아무도 없는 복도 끝에서, 분명히 내 이름을 부르는 작은 목소리가 들렸어요.';
   const DEF = {
-    '나레이션목소리_너무': EL_DEFAULTS[0], '나레이션목소리_조금': EL_DEFAULTS[1], '나레이션목소리_안무서움': EL_DEFAULTS[2],
     '귀신수_너무': '0', '귀신수_조금': '1', '귀신수_안무서움': '2',
     '은은한소리_너무': '예', '은은한소리_조금': '예', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
@@ -37,7 +23,6 @@
   function get(st, k) {
     st = st || {};
     if (st[k] != null && st[k] !== '') return String(st[k]);
-    if (k.startsWith('나레이션목소리_') && st['나레이션목소리']) return String(st['나레이션목소리']);
     // 예전 키 호환
     if (k === '귀신수_안무서움' && st['용감한조귀신수']) return String(st['용감한조귀신수']);
     if (k === '은은한소리_안무서움' && st['효과음']) return String(st['효과음']);
@@ -78,8 +63,7 @@
     offIds: (st) => String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean),
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
-    render(el, st, { onSave, onPreview, onStop, samplePreview = false, stationCount, stations } = {}) {
-      if (el.stopIntensityPreview) el.stopIntensityPreview();
+    render(el, st, { onSave, onPreview, onStop, stationCount, stations } = {}) {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const max = Math.max(1, stationCount || 4);
       const sel = (k) => `<select data-k="${k}">${Array.from({ length: max + 1 }, (_, i) => `<option value="${i}"${String(i) === get(st, k) ? ' selected' : ''}>${i}곳</option>`).join('')}</select>`;
@@ -120,13 +104,10 @@
     </table></div>`).join('')}
   <div class="int-voices" data-prov="ElevenLabs"${get(st, '나레이션방식') === 'ElevenLabs' ? '' : ' hidden'}>
     <table class="int-t"><tr><th>ElevenLabs 단계별 목소리</th><th>Voice ID (목록에서 고르거나 Voice Library 의 ID 붙여넣기)</th></tr>
-    ${LEVELS.map((l, i) => `<tr><td>${l.label}<p class="int-help">추천: ${esc(EL_VOICES[i][1])}</p></td><td><input aria-label="${l.label} Voice ID" list="int-el-voices" data-k="나레이션목소리_${l.key}" value="${esc(get(st, '나레이션목소리_' + l.key))}" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:14px"><button type="button" data-el-listen="${i}">이 목소리 바로 듣기</button><button type="button" data-el-default="${i}">추천값 넣기</button></td></tr>`).join('')}
+    ${LEVELS.map((l, i) => `<tr><td>${l.label}</td><td><input list="int-el-voices" data-k="나레이션목소리_${l.key}" value="${esc(get(st, '나레이션목소리_' + l.key) || ['21m00Tcm4TlvDq8ikWAM', 'EXAVITQu4vr4xnSDxMaL', 'pNInz6obpgDQGcFmaJgB'][i])}" style="width:100%;max-width:340px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:14px"></td></tr>`).join('')}
     </table>
-    <datalist id="int-el-voices">${EL_VOICES.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')}</datalist>
-    <div class="int-row"><label>비교할 단계 <select class="int-el-level">${LEVELS.map((l, i) => `<option value="${i}"${i === 1 ? ' selected' : ''}>${l.label}</option>`).join('')}</select></label></div>
-    <div class="int-el-candidates">${EL_VOICES.map(([id, name]) => `<div class="int-row"><span>${esc(name)}</span><button type="button" data-el-candidate="${id}">짧게 듣기</button><button type="button" data-el-select="${id}">비교 단계에 선택</button></div>`).join('')}</div>
-    <p class="int-help">시험 문장: ${EL_SAMPLE}<br>짧게 듣기는 설정을 저장하지 않습니다. 목소리를 고른 뒤 아래 저장 버튼을 누르세요. 같은 목소리·단계·문장은 재사용합니다. 한국어 발음과 무서운 정도는 직접 비교해 주세요.</p>
-    <p class="int-help">기본 목소리는 2026년 3월 이전 가입 계정에 제공되며 2026년 12월 31일 종료 예정입니다. 무료 API에서는 Voice Library 목소리를 쓸 수 없습니다. 이용 가능 여부는 바로 듣기로 확인하세요.</p>
+    <datalist id="int-el-voices"><option value="21m00Tcm4TlvDq8ikWAM">Rachel · 여성 차분</option><option value="EXAVITQu4vr4xnSDxMaL">Sarah · 여성 부드러움</option><option value="pNInz6obpgDQGcFmaJgB">Adam · 남성 낮음</option><option value="ErXwobaYiN019PkySvjV">Antoni · 남성</option></datalist>
+    <p class="int-help">ElevenLabs 사이트에서 마음에 드는 목소리의 Voice ID를 복사해 칸에 붙여 넣고 💾 저장하면, 모든 태블릿이 그 목소리로 읽어요. 아래 "나레이션 미리 듣기"로 바로 확인할 수 있어요. 무료 요금제에서는 쓸 수 없는 목소리도 있어서, 그럴 땐 미리 듣기에 오류가 떠요.</p>
   </div>
   <div class="int-row int-preview"><span>나레이션 미리 듣기</span>
     <select class="int-pv-lv"><option value="0">😱 너무 무서워요 말투</option><option value="1" selected>😬 조금 무서워요 말투</option><option value="2">😎 하나도 안 무서워요 말투</option></select>
@@ -169,63 +150,6 @@
   </div>
 </div>`;
       const msg = (t, ok) => { const m = el.querySelector('.int-msg'); m.textContent = t; m.style.color = ok === false ? '#ff9aa8' : ok ? '#9ce6b4' : ''; };
-      const voiceInput = (i) => el.querySelector(`[data-k="나레이션목소리_${LEVELS[i].key}"]`);
-      const compareLevel = () => Number(el.querySelector('.int-el-level').value);
-      el.querySelectorAll('[data-el-default]').forEach((b) => { b.onclick = () => {
-        const i = Number(b.dataset.elDefault); voiceInput(i).value = EL_DEFAULTS[i]; msg('추천값을 넣었어요. 적용하려면 저장하세요.');
-      }; });
-      el.querySelectorAll('[data-el-select]').forEach((b) => { b.onclick = () => {
-        voiceInput(compareLevel()).value = b.dataset.elSelect; msg('목소리를 선택했어요. 적용하려면 저장하세요.');
-      }; });
-      // 태블릿은 onPreview/IndexedDB를 재사용. 진행판의 기존 긴 이야기 콜백은
-      // 그대로 두고 동일한 tts 액션과 서버 캐시를 사용한다(teacher.js 수정 범위 밖).
-      let sampleAudio = null, sampleUrl = '', sampleToken = 0, sampleBusy = false;
-      const sampleCache = new Map();
-      const stopSample = () => {
-        sampleToken++;
-        if (sampleAudio) sampleAudio.pause();
-        if (sampleUrl) URL.revokeObjectURL(sampleUrl);
-        sampleAudio = null; sampleUrl = '';
-      };
-      el.stopIntensityPreview = stopSample;
-      const shortPreview = async (voice, level) => {
-        if (sampleBusy) return;
-        if (!/^[a-zA-Z0-9]{20}$/.test(voice)) return msg('Voice ID를 확인하세요(영문·숫자 20자리).', false);
-        stopSample(); if (onStop) onStop();
-        const token = sampleToken, cacheKey = [voice, level, EL_SAMPLE].join('|');
-        const buttons = el.querySelectorAll('[data-el-listen], [data-el-candidate], .int-pv-play');
-        sampleBusy = true; buttons.forEach((b) => { b.disabled = true; });
-        msg('짧은 문장을 준비하는 중...');
-        try {
-          let blob = sampleCache.get(cacheKey);
-          if (!blob && samplePreview && onPreview) {
-            const result = await onPreview({ previewVoice: voice, text: EL_SAMPLE }, level, 'sample');
-            if (!result || !result.clip) throw new Error(result && result.error || '시험 음성을 받지 못했어요.');
-            blob = result.clip;
-            sampleCache.set(cacheKey, blob);
-          }
-          if (!blob) {
-            const teacher = !!document.getElementById('inUrl');
-            const connection = JSON.parse(localStorage.getItem(teacher ? 'hg_teacher' : 'hg_conf') || '{}');
-            if (!connection.apiUrl || !connection.apiKey) throw new Error('먼저 연결 화면에서 구글 시트 연결을 저장하세요.');
-            const response = await fetch(connection.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({ key: connection.apiKey, action: 'tts', provider: 'ElevenLabs', level, text: EL_SAMPLE, previewVoice: voice }) });
-            const result = await response.json();
-            if (!result.ok) throw new Error(result.error || '음성 생성 실패');
-            if (result.voice !== voice || result.preview !== true) throw new Error('Code.gs를 새 버전으로 배포한 뒤 다시 시험하세요.');
-            blob = new Blob([Uint8Array.from(atob(result.data), (c) => c.charCodeAt(0))], { type: result.mime || 'audio/mpeg' });
-            sampleCache.set(cacheKey, blob);
-          }
-          if (token !== sampleToken || !el.isConnected) return;
-          sampleUrl = URL.createObjectURL(blob); sampleAudio = new Audio(sampleUrl);
-          sampleAudio.onended = () => { stopSample(); msg('시험이 끝났어요. 마음에 들면 선택 후 저장하세요.', true); };
-          await sampleAudio.play();
-          if (token === sampleToken) msg('선택한 ElevenLabs 목소리로 짧게 읽고 있어요.', true);
-        } catch (e) { if (token === sampleToken) { stopSample(); msg('바로 듣기 실패: ' + e.message, false); } }
-        finally { sampleBusy = false; buttons.forEach((b) => { b.disabled = false; }); }
-      };
-      el.querySelectorAll('[data-el-listen]').forEach((b) => { b.onclick = () => { const i = Number(b.dataset.elListen); shortPreview(voiceInput(i).value.trim(), i); }; });
-      el.querySelectorAll('[data-el-candidate]').forEach((b) => { b.onclick = () => shortPreview(b.dataset.elCandidate, compareLevel()); });
       el.querySelectorAll('input[type=range]').forEach((r) => { r.oninput = () => { el.querySelector(`[data-v="${r.dataset.k}"]`).textContent = Math.round(r.value * 100) + '%'; }; });
       el.querySelectorAll('[data-play]').forEach((b) => {
         b.onclick = () => {
@@ -260,9 +184,8 @@
       };
       el.querySelectorAll('input[name="int-voice"]').forEach((r) => { r.onchange = () => { el.querySelectorAll('.int-voices').forEach((d) => { d.hidden = d.dataset.prov !== r.value; }); }; });
       el.querySelector('.int-save').onclick = () => save(collect());
-      el.querySelector('.int-pv-stop').onclick = () => { stopSample(); if (onStop) onStop(); msg('재생을 멈췄어요.'); };
+      el.querySelector('.int-pv-stop').onclick = () => { if (onStop) onStop(); };
       el.querySelector('.int-pv-play').onclick = async () => {
-        stopSample();
         if (!onPreview) return msg('이 화면에서는 미리 듣기를 할 수 없어요', false);
         const o = collect(), lv = Number(el.querySelector('.int-pv-lv').value), which = el.querySelector('.int-pv-text').value;
         const changed = Object.keys(o).some((k) => /목소리|나레이션방식|속도|높이/.test(k) && String(o[k]) !== String(get(st, k)));
