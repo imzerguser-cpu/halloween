@@ -1568,6 +1568,8 @@
     $('btnPinCancel').onclick = goHome;
     $('btnAdminExit').onclick = goHome;
     $('btnAdminEnter').onclick = openPin;
+    $('btnGuide').onclick = () => { $('guideFrame').src = 'guide.html?embed=1'; $('guideModal').hidden = false; };
+    $('btnGuideClose').onclick = () => { $('guideModal').hidden = true; $('guideFrame').src = 'about:blank'; };
     $('adminTabs').onclick = (e) => { const t = e.target.closest('.tab'); if (t) switchTab(t.dataset.tab); };
     $('btnLoadRoster').onclick = async () => {
       conf.apiUrl = $('inApiUrl').value.trim(); conf.apiKey = $('inApiKey').value.trim(); writeLS(LS_CONF, conf);
