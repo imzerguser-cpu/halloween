@@ -36,7 +36,7 @@
           const [kind, a, b] = f.dataset.key.split(':'), v = f.value.trim();
           if (kind === 'p') payload.prologue[Number(a)] = v;
           else {
-            const o = payload.stations[a] || (payload.stations[a] = { title: '', texts: ['', '', ''] });
+            const o = payload.stations[a] || (payload.stations[a] = { title: '', texts: ['', '', ''], name: ((stations.find((x) => x.id === a) || {}).name) || '' });
             if (kind === 't') o.title = v; else o.texts[Number(b)] = v;
           }
         });

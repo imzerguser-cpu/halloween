@@ -207,15 +207,15 @@
     if (blob) { const a = new Audio(URL.createObjectURL(blob)); a.volume = Math.max(0, Math.min(1, vol)); a.play().catch(() => { if (window.Sfx) Sfx.loud('shriek', vol); }); return; }
     if (window.Sfx) Sfx.loud('shriek', vol);
   }
-  async function spookVoice(fear) {
+  async function spookVoice(fear, always) {
     const lines = VOICE_LINES[fear === 2 ? 2 : 1], text = lines[Math.floor(Math.random() * lines.length)];
     try {
       if (ttsProvider()) {
         const clip = await ttsClip(text, fear === 2 ? 2 : 1);
-        if (clip && stream) { const a = new Audio(URL.createObjectURL(clip)); a.volume = loudVol(); a.play().catch(() => {}); return; }
+        if (clip && (stream || always)) { const a = new Audio(URL.createObjectURL(clip)); a.volume = loudVol(); a.play().catch(() => {}); return; }
       }
     } catch (e) {}
-    if (!('speechSynthesis' in window) || !stream) return;
+    if (!('speechSynthesis' in window) || !(stream || always)) return;
     const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = 1;
     u.rate = fear === 2 ? 0.6 : 0.95; u.pitch = fear === 2 ? 0.2 : 0.9;
     try { speechSynthesis.resume(); speechSynthesis.speak(u); } catch (e) {}
@@ -231,9 +231,9 @@
     else Sfx.loud(pick, loudVol());
   }
   /** 은은한 소리로 긴장시키고, 큰 소리가 켜져 있으면 3~6초 뒤 쾅! */
-  function scheduleSpook(minMs, maxMs, name) {
+  function scheduleSpook(minMs, maxMs, name, softOnly) {
     clearTimeout(spookTimer); clearTimeout(loudTimer);
-    const soft = sfxOn(), loud = loudOn();
+    const soft = sfxOn(), loud = !softOnly && loudOn();
     if (!soft && !loud) return;
     const at = minMs + Math.random() * Math.max(0, maxMs - minMs);
     if (soft) spookTimer = setTimeout(() => { if (stream) Sfx.play(name, sfxVol()); }, at);
@@ -690,7 +690,7 @@
       return backFromCamera();
     }
     if (mode === 'scan') startScan();
-    if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000);
+    if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000, null, mode === 'student' && photoOnly());
     if (['student', 'burst', 'video', 'screentest'].includes(mode)) { prewarmScreenGhost(mode === 'screentest'); prefetchSfx(); }
   }
   function closeCamera() {
@@ -836,7 +836,7 @@
     c.classList.remove('mirror');
     const x = c.getContext('2d'), t0 = performance.now(), dur = 700;
     playScream(loudVol());                                                  // 여자 비명 (사용자 요청: 쾅보다 비명)
-    setTimeout(() => spookVoice(2), 1600);                                   // 비명 뒤 귀신 목소리
+    setTimeout(() => spookVoice(2, true), 1600);                            // 셔터 뒤에도 끝까지                                   // 비명 뒤 귀신 목소리
     v.classList.add('glitch');
     $('camCount').style.visibility = 'hidden';
     const frame = (now) => {
@@ -863,6 +863,10 @@
     let shown = false;
     screenGhostWhy = want ? '' : '귀신 없는 조·장소';
     const react = want ? startReaction(!!force) : null;
+    const loudHere = !force && !jump && n >= 4 && loudOn();                   // 2단계: 큰 소리
+    let loudDone = false;
+    const fireLoud = () => { if (loudHere && !loudDone && stream) { loudDone = true; playLoud(teamFear(cur.group)); } };
+    if (loudHere) { clearTimeout(loudTimer); loudTimer = setTimeout(fireLoud, want ? Math.max(2500, n * 1000 - 1800) : 2000); }   // 귀신이 안 나오면 이때
     if (jump) {
       clearTimeout(loudTimer);                                               // 큰 소리는 깜짝 얼굴과 함께
       const jumpAt = n * 1000 - 800 - 700;
@@ -878,7 +882,7 @@
         const wait = Math.max(0, start + appearAt - performance.now());
         const hold = Math.min(900 + Math.random() * 300, start + room - performance.now() - wait - 600);
         if (hold < 600) { screenGhostWhy = '준비가 늦어 건너뜀'; return; }
-        screenGhostTimer = setTimeout(() => { shown = true; playScreenGhost(p, hold); if (!jump) triggerReaction(react); }, wait);
+        screenGhostTimer = setTimeout(() => { shown = true; playScreenGhost(p, hold); if (!jump) triggerReaction(react); fireLoud(); }, wait);
       }).catch((e) => { screenGhostWhy = e.message; });
     }
     await countdown(n, 1000);

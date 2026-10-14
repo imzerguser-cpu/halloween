@@ -170,7 +170,9 @@
       h += `<tr><td><b>${g.group}조</b> ${g.young ? '' : FEAR[g.fear == null ? 1 : g.fear]}${ex.has(g.group) ? `<br><span class="tag x">${why}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
       st.forEach((s) => {
         const mine = list.filter((r) => Number(r['조']) === g.group && r['장소id'] === s.id);
-        const orig = mine.filter((r) => r['구분'] === '원본');
+        const isReact = (r) => /_놀람/.test(String(r['파일명'] || ''));
+        const reacts = mine.filter(isReact);
+        const orig = mine.filter((r) => r['구분'] === '원본' && !isReact(r));   // 진행 표시는 인증샷 기준
         const edited = mine.filter((r) => r['구분'] === '수정본');
         const attempts = new Map();
         orig.forEach((r) => { const k = attemptKey(r); if (!attempts.has(k)) attempts.set(k, r); });
@@ -184,6 +186,7 @@
         if (fails) cell += `<span class="st-bad" style="font-size:12px">실패 ${fails}회</span>`;
         let tags = '';
         if (ghostAt.includes(s.id)) tags += '<span class="tag g">👻</span> ';
+        if (reacts.length) tags += `<span class="tag u" title="놀람 장면 ${reacts.length}개">😱 ${reacts.length}</span> `;
         const vids = orig.filter((r) => r['종류'] === '영상' && r['편집']);
         if (edited.length) tags += '<span class="tag u">★ 수정</span>';
         else if (vids.some((r) => r['편집'] === '대기')) tags += '<span class="tag w">⏳ 수정 대기</span>';
