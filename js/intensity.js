@@ -12,7 +12,7 @@
   const DEF = {
     '귀신수_너무': '0', '귀신수_조금': '1', '귀신수_안무서움': '2',
     '은은한소리_너무': '예', '은은한소리_조금': '예', '은은한소리_안무서움': '예',
-    '큰소리_너무': '아니오', '큰소리_조금': '아니오', '큰소리_안무서움': '예',
+    '큰소리_너무': '아니오', '큰소리_조금': '예', '큰소리_안무서움': '예',
     '깜짝얼굴_너무': '아니오', '깜짝얼굴_조금': '아니오', '깜짝얼굴_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
@@ -153,6 +153,7 @@
   <div class="int-row">
     <button type="button" class="int-save">💾 저장 (모든 태블릿에 적용)</button>
     <button type="button" class="int-shuffle">🔀 귀신 장소 다시 섞기</button>
+    <button type="button" class="int-reset">↩ 단계별 기본값으로</button>
     <span class="int-msg"></span>
   </div>
 </div>`;
@@ -210,6 +211,17 @@
         if (a !== b) return msg('두 칸의 비밀번호가 달라요', false);
         el.querySelector('.int-pin1').value = ''; el.querySelector('.int-pin2').value = '';
         save({ '관리자PIN': a }, '교사 모드 비밀번호를 바꿨어요. 모든 태블릿에 1분 안에 적용돼요.');
+      };
+      // 무서움 단계 표(귀신 수·은은한 소리·큰 소리·깜짝 얼굴)만 기본값으로 채운다. 저장을 눌러야 적용
+      el.querySelector('.int-reset').onclick = () => {
+        LEVELS.forEach((l) => {
+          ['귀신수_', '은은한소리_', '큰소리_', '깜짝얼굴_'].forEach((p) => {
+            const k = p + l.key, f = el.querySelector(`[data-k="${k}"]`);
+            if (!f) return;
+            if (f.type === 'checkbox') f.checked = DEF[k] === '예'; else f.value = DEF[k];
+          });
+        });
+        msg('단계별 기본값으로 채웠어요. 💾 저장을 눌러야 적용돼요.');
       };
       let armed = 0;
       el.querySelector('.int-shuffle').onclick = () => {

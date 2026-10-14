@@ -1,8 +1,9 @@
 {
   "ghosts": [
-    { "file": "ghost-white.png", "kind": "full", "height": [0.34, 0.5] },
-    { "file": "ghost-school.png", "kind": "full", "height": [0.32, 0.46] },
-    { "file": "ghost-child.png", "kind": "full", "height": [0.24, 0.36] },
+    { "file": "ghost-white.png", "kind": "full", "height": [0.34, 0.5], "stations": ["library", "storage", "class6", "stairs", "hall2", "english"] },
+    { "file": "ghost-school.png", "kind": "full", "height": [0.32, 0.46], "stations": ["class6", "class1", "library", "hall2"] },
+    { "file": "ghost-child.png", "kind": "full", "height": [0.24, 0.36], "stations": ["class1", "storage", "stairs"] },
+    { "file": "ghost-labcoat.png", "kind": "full", "height": [0.34, 0.5], "stations": ["science"] },
     { "file": "ghost-face.png", "kind": "face", "height": [0.16, 0.24] }
   ]
 }

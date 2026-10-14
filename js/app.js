@@ -177,6 +177,59 @@
   const sfxVol = () => (window.Intensity ? Intensity.softVol(cache.settings) : 0.6);
   const jumpOn = () => { const f = teamFear(cur.group); return !!window.Intensity && f != null && Intensity.jumpOn(cache.settings, f); };
   const loudVol = () => (window.Intensity ? Intensity.loudVol(cache.settings) : 1);
+  // 사람·귀신 목소리 대사: 2단계(조금)는 사람 목소리, 3단계(안 무서움)는 귀신 목소리. 나레이션 방식(ElevenLabs 등)이면 그 목소리, 아니면 태블릿 음성
+  const VOICE_LINES = { 1: ['거기 누구 있어?', '쉿… 조용히 해…', '누구야…?', '나가!'], 2: ['같이… 놀자…', '히히히히히…', '뒤를… 봐…', '여기서… 나가…', '찾았다…'] };
+  // 실제 같은 효과음(여자 비명 등): Apps Script 가 ElevenLabs 로 한 번 만들어 둔 것을 받아 이 태블릿에 저장. 없으면 null
+  const sfxClips = {};
+  async function sfxClip(name) {
+    if (sfxClips[name]) return sfxClips[name];
+    const k = 'sfx|' + name;
+    let blob = await ttsDb.get(k).catch(() => null);
+    if (!blob && conf.apiUrl && conf.apiKey && navigator.onLine) {
+      try {
+        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, action: 'sfx', name }) });
+        const j = await r.json();
+        if (j.ok && j.data) {
+          const bin = atob(j.data), u8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+          blob = new Blob([u8], { type: j.mime || 'audio/mpeg' });
+          await ttsDb.put(k, blob).catch(() => {});
+        }
+      } catch (e) {}
+    }
+    if (blob) sfxClips[name] = blob;
+    return blob || null;
+  }
+  const prefetchSfx = () => { ['scream', 'scream2', 'laugh'].forEach((n) => sfxClip(n).catch(() => {})); };
+  /** 여자 비명 → 없으면 합성 비명 */
+  async function playScream(vol) {
+    const blob = sfxClips.scream || sfxClips.scream2 ? (Math.random() < 0.5 ? sfxClips.scream || sfxClips.scream2 : sfxClips.scream2 || sfxClips.scream) : null;
+    if (blob) { const a = new Audio(URL.createObjectURL(blob)); a.volume = Math.max(0, Math.min(1, vol)); a.play().catch(() => { if (window.Sfx) Sfx.loud('shriek', vol); }); return; }
+    if (window.Sfx) Sfx.loud('shriek', vol);
+  }
+  async function spookVoice(fear) {
+    const lines = VOICE_LINES[fear === 2 ? 2 : 1], text = lines[Math.floor(Math.random() * lines.length)];
+    try {
+      if (ttsProvider()) {
+        const clip = await ttsClip(text, fear === 2 ? 2 : 1);
+        if (clip && stream) { const a = new Audio(URL.createObjectURL(clip)); a.volume = loudVol(); a.play().catch(() => {}); return; }
+      }
+    } catch (e) {}
+    if (!('speechSynthesis' in window) || !stream) return;
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = 1;
+    u.rate = fear === 2 ? 0.6 : 0.95; u.pitch = fear === 2 ? 0.2 : 0.9;
+    try { speechSynthesis.resume(); speechSynthesis.speak(u); } catch (e) {}
+  }
+  /** 단계별 큰 소리: 2단계 = 쨍그랑·쾅·사람 목소리, 3단계 = 귀신 목소리·비명·굉음 */
+  function playLoud(fear) {
+    if (!window.Sfx) return;
+    const pool = fear === 2 ? ['voice', 'voice', 'scream', 'laugh', 'glass'] : ['glass', 'glass', 'slam', 'pound', 'voice'];
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    if (pick === 'voice') spookVoice(fear);
+    else if (pick === 'scream') playScream(loudVol());
+    else if (pick === 'laugh') { if (sfxClips.laugh) { const a = new Audio(URL.createObjectURL(sfxClips.laugh)); a.volume = loudVol(); a.play().catch(() => {}); } else spookVoice(2); }
+    else Sfx.loud(pick, loudVol());
+  }
   /** 은은한 소리로 긴장시키고, 큰 소리가 켜져 있으면 3~6초 뒤 쾅! */
   function scheduleSpook(minMs, maxMs, name) {
     clearTimeout(spookTimer); clearTimeout(loudTimer);
@@ -184,7 +237,7 @@
     if (!soft && !loud) return;
     const at = minMs + Math.random() * Math.max(0, maxMs - minMs);
     if (soft) spookTimer = setTimeout(() => { if (stream) Sfx.play(name, sfxVol()); }, at);
-    if (loud) loudTimer = setTimeout(() => { if (stream) Sfx.loud(null, loudVol()); }, soft ? at + 3000 + Math.random() * 3000 : at);
+    if (loud) loudTimer = setTimeout(() => { if (stream) playLoud(teamFear(cur.group)); }, soft ? at + 3000 + Math.random() * 3000 : at);
   }
   document.addEventListener('pointerdown', () => { if (window.Sfx) Sfx.unlock(); });
 
@@ -455,6 +508,7 @@
   let ttsError = '', narrAudio = null, narrToken = 0;
   /** 이 장소에서 쓸 이야기(3단계, 출발 장소면 프롤로그도)를 미리 만들어 둔다 — 행사 중 와이파이가 끊겨도 재생 */
   async function prefetchNarration() {
+    prefetchSfx();
     if (!ttsProvider() || !station()) return;
     const s = station(), def = storyDef(s);
     for (let lv = 0; lv < 3; lv++) {
@@ -462,6 +516,7 @@
       if (txt) await ttsClip(cleanSpeech(txt), lv).catch(() => {});
       if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
     }
+    for (const f of [1, 2]) for (const line of VOICE_LINES[f]) await ttsClip(line, f).catch(() => {});
   }
   const cleanSpeech = (t) => String(t || '').replace(/[「」📜😊]/g, '').trim();
   async function narrate(text, opts) {
@@ -633,7 +688,7 @@
     }
     if (mode === 'scan') startScan();
     if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000);
-    if (['student', 'burst', 'video', 'screentest'].includes(mode)) prewarmScreenGhost(mode === 'screentest');
+    if (['student', 'burst', 'video', 'screentest'].includes(mode)) { prewarmScreenGhost(mode === 'screentest'); prefetchSfx(); }
   }
   function closeCamera() {
     stopScan();
@@ -777,7 +832,8 @@
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.classList.remove('mirror');
     const x = c.getContext('2d'), t0 = performance.now(), dur = 700;
-    if (window.Sfx) Sfx.loud(null, loudVol());
+    playScream(loudVol());                                                  // 여자 비명 (사용자 요청: 쾅보다 비명)
+    setTimeout(() => spookVoice(2), 1600);                                   // 비명 뒤 귀신 목소리
     v.classList.add('glitch');
     $('camCount').style.visibility = 'hidden';
     const frame = (now) => {

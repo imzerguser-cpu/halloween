@@ -1,6 +1,7 @@
 /* 효과음 — 녹음 파일 없이 Web Audio 로 합성한다 (저작권·인터넷 걱정 없음).
  * 은은한 소리: 노크 · 문 삐걱 · 심장 소리 · 숨소리(속삭임)
- * 큰 소리(LOUD, "하나도 안 무서워요" 조 + 시트 설정 큰소리=예 일 때만): 문 쾅 · 벽 쾅쾅 · 낮은 굉음
+ * 큰 소리(LOUD, 시트 설정 큰소리=예 인 단계만): 문 쾅 · 벽 쾅쾅 · 낮은 굉음 · 쨍그랑 · 비명
+ * 사람·귀신 목소리 대사는 app.js 의 spookVoice (나레이션 목소리로 읽음)
  * window.Sfx.unlock() 은 화면을 처음 누를 때 불러야 소리가 난다(브라우저 규칙).
  */
 (function () {
@@ -115,8 +116,59 @@
     n.connect(nf).connect(ng).connect(dst); n.start(t0);
     return 1.9;
   }
+  // 쨍그랑: 유리가 깨지며 파편이 흩어지는 소리
+  function glass(c, dst, t0) {
+    const n = c.createBufferSource(), hp = c.createBiquadFilter(), ng = c.createGain();
+    n.buffer = noiseBuffer(c, 0.5); hp.type = 'highpass'; hp.frequency.value = 1800;
+    ng.gain.setValueAtTime(0.0001, t0); ng.gain.exponentialRampToValueAtTime(1, t0 + 0.005); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+    n.connect(hp).connect(ng).connect(dst); n.start(t0);
+    for (let i = 0; i < 26; i++) {                                            // 파편 딸랑딸랑
+      const t = t0 + 0.02 + Math.pow(Math.random(), 1.6) * 1.1, o = c.createOscillator(), g = c.createGain();
+      o.type = Math.random() < 0.5 ? 'sine' : 'triangle'; o.frequency.value = 2200 + Math.random() * 5200;
+      const v = 0.12 + Math.random() * 0.3;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08 + Math.random() * 0.25);
+      o.connect(g).connect(dst); o.start(t); o.stop(t + 0.4);
+    }
+    return 1.4;
+  }
+  // 날카로운 비명 같은 소리 (끼야아—)
+  function shriek(c, dst, t0) {
+    const o = c.createOscillator(), o2 = c.createOscillator(), lfo = c.createOscillator(), lg = c.createGain(), g = c.createGain();
+    o.type = 'sawtooth'; o2.type = 'square';
+    o.frequency.setValueAtTime(700, t0); o.frequency.exponentialRampToValueAtTime(1500, t0 + 0.25); o.frequency.exponentialRampToValueAtTime(1100, t0 + 1.3);
+    o2.frequency.setValueAtTime(710, t0); o2.frequency.exponentialRampToValueAtTime(1490, t0 + 0.25); o2.frequency.exponentialRampToValueAtTime(1080, t0 + 1.3);
+    lfo.frequency.value = 7; lg.gain.value = 40; lfo.connect(lg); lg.connect(o.frequency); lg.connect(o2.frequency);
+    const f1 = c.createBiquadFilter(), f2 = c.createBiquadFilter(), mix = c.createGain();
+    f1.type = 'bandpass'; f1.frequency.value = 1300; f1.Q.value = 4; f2.type = 'bandpass'; f2.frequency.value = 2900; f2.Q.value = 5;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.9, t0 + 0.06); g.gain.setValueAtTime(0.9, t0 + 1.0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.5);
+    o.connect(f1); o2.connect(f2); f1.connect(mix); f2.connect(mix); mix.connect(g).connect(dst);
+    const n = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();     // 거친 숨
+    n.buffer = noiseBuffer(c, 1.5); nf.type = 'bandpass'; nf.frequency.value = 3000; nf.Q.value = 0.8;
+    ng.gain.setValueAtTime(0.0001, t0); ng.gain.exponentialRampToValueAtTime(0.35, t0 + 0.05); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4);
+    n.connect(nf).connect(ng).connect(dst);
+    [o, o2, lfo].forEach((x) => { x.start(t0); x.stop(t0 + 1.6); }); n.start(t0);
+    return 1.6;
+  }
+  // 깜짝 얼굴용 임팩트: 몸이 울리는 저음 쿵 + 날카로운 타격음 + 금속성 울림
+  function impact(c, dst, t0) {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(120, t0); o.frequency.exponentialRampToValueAtTime(32, t0 + 0.6);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(1, t0 + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+    o.connect(g).connect(dst); o.start(t0); o.stop(t0 + 1.2);
+    const n = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
+    n.buffer = noiseBuffer(c, 0.4); nf.type = 'lowpass'; nf.frequency.setValueAtTime(9000, t0); nf.frequency.exponentialRampToValueAtTime(300, t0 + 0.35);
+    ng.gain.setValueAtTime(0.0001, t0); ng.gain.exponentialRampToValueAtTime(1, t0 + 0.002); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.38);
+    n.connect(nf).connect(ng).connect(dst); n.start(t0);
+    [220, 331, 467, 690].forEach((f, i) => {                                 // 금속성 울림 (징—)
+      const m = c.createOscillator(), mg = c.createGain();
+      m.type = 'triangle'; m.frequency.value = f * (1 + (Math.random() - 0.5) * 0.02);
+      mg.gain.setValueAtTime(0.0001, t0); mg.gain.exponentialRampToValueAtTime(0.25 / (i + 1), t0 + 0.01); mg.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.6);
+      m.connect(mg).connect(dst); m.start(t0); m.stop(t0 + 1.7);
+    });
+    return 1.7;
+  }
   const SOUNDS = { knock, creak, heartbeat, whisper };
-  const LOUD = { slam, pound, boom };
+  const LOUD = { slam, pound, boom, glass, shriek, impact };
 
   window.Sfx = {
     unlock() { try { ac(); } catch (e) {} },

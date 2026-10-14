@@ -69,9 +69,9 @@
 
   /** 귀신 하나를 놓을 자리: 어둡고, 사람과 안 겹치고, 가장자리에 너무 붙지 않은 곳 */
   // 셀카 화면: 얼굴 귀신을 학생 얼굴만 하게(화면 높이 40~55%), 학생 옆·뒤에서 들여다보듯
-  const SELFIE_H = [0.4, 0.55];
+  const SELFIE_H = { face: [0.4, 0.55], half: [0.5, 0.7], full: [0.62, 0.86] };
   function place(a, g, rnd, selfie, anyLight) {
-    const range = selfie ? SELFIE_H : g.height || KIND_H[g.kind] || KIND_H.full;
+    const range = selfie ? (SELFIE_H[g.kind] || SELFIE_H.full) : g.height || KIND_H[g.kind] || KIND_H.full;
     const best = [];
     for (const f of [1, 0.85, 0.7]) {
       const h = Math.round(a.H * (range[0] + (range[1] - range[0]) * rnd()) * f), w = Math.max(4, Math.round(h * g.image.width / g.image.height));
@@ -81,6 +81,7 @@
         if (g.kind === 'full' && y + h < a.H * 0.5) continue;              // 서 있는 귀신은 발이 화면 아래쪽에
         if (!selfie && g.kind !== 'full' && y + h > a.H * 0.6) continue;   // 얼굴·상반신은 창문 높이(화면 위쪽)에
         if (selfie && y > a.H * 0.35) continue;                              // 셀카: 얼굴이 학생 얼굴 높이쯤
+        if (selfie && g.kind === 'full' && y + h < a.H * 0.8) continue;      // 셀카: 서 있는 귀신은 학생들 뒤에 선 것처럼 아래까지
         const p = a.person(x, y, w, h);
         if (p > (anyLight ? 0.7 : selfie ? 0.35 : 0.02)) continue;                            // 셀카: 학생 뒤에 조금 가려져도 됨
         const m = a.mean(x, y, w, h);
@@ -107,11 +108,11 @@
       try { await GhostEngine.init({ base: opts.base || './' }); mask = await GhostEngine.utils.personMask(photo); } catch (e) { mask = null; }
     }
     const a = analyse(photo, mask);
-    const faces = opts.selfie ? lib.ghosts.filter((g) => g.kind === 'face') : [];
-    const pref = lib.ghosts.filter((g) => g.stations && opts.stationId && g.stations.includes(opts.stationId));
-    const pool = (faces.length ? faces : pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
+    // 장소에 어울리는 귀신(stations 에 그 장소가 있거나 stations 가 없는 귀신) 중에서 고른다
+    const pref = lib.ghosts.filter((g) => !g.stations || (opts.stationId && g.stations.includes(opts.stationId)));
+    const pool = (pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
     let g = null, spot = null;
-    for (const cand of pool) { spot = place(a, cand, rnd, !!opts.selfie && cand.kind === 'face', !!opts.anyLight); if (spot) { g = cand; break; } }
+    for (const cand of pool) { spot = place(a, cand, rnd, !!opts.selfie, !!opts.anyLight); if (spot) { g = cand; break; } }
     if (!spot) return { reason: 'free-no-dark-spot' };
 
     const sx = photo.width / a.W, sy = photo.height / a.H;
