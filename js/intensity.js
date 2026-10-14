@@ -62,7 +62,7 @@
     /** 귀신 보이는 방법: 화면 · 사진 · 둘다 */
     ghostView: (st) => (['화면', '사진', '둘다'].includes(get(st, '귀신보기')) ? get(st, '귀신보기') : '화면'),
     /** 이번 행사에서 쓰지 않는 장소 id */
-    offIds: (st) => String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean),
+    offIds: (st) => (window.HG_TOUR && HG_TOUR.modeOf(st) === '코스' ? [] : String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean)),   // 마동 코스는 코스 장소 목록이 곧 쓰는 장소
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
     render(el, st, { onSave, onPreview, onStop, stationCount, stations, rawStations } = {}) {
