@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>방송 배경음</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;min-height:100%;background:#0b0b10;color:#e8eaf0;font-family:'Malgun Gothic',sans-serif}
+  .wrap{max-width:640px;margin:0 auto;padding:24px 16px 40px}
+  h1{font-size:22px;color:#ffcf7a;margin:0 0 6px}
+  p{font-size:14px;color:#a9aec0;line-height:1.6;margin:6px 0}
+  .card{background:#181b22;border:1px solid #2e3240;border-radius:14px;padding:16px;margin-top:14px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0}
+  .row>span{min-width:120px;font-size:14px;color:#c3c7d4}
+  input[type=range]{flex:1;min-width:160px}
+  input[type=number]{width:70px;padding:6px 8px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
+  label.chk{display:inline-flex;gap:6px;align-items:center;font-size:14px;margin-right:12px}
+  button{border:none;border-radius:10px;padding:12px 18px;font-weight:700;font-size:16px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}
+  button.sub{background:#252935;color:#e8eaf0;font-size:14px;padding:9px 14px}
+  #state{font-size:20px;font-weight:700;margin:8px 0}
+  #state.play{color:#9ce6b4}#state.rest{color:#8c91a3}
+  #bar{height:8px;background:#252935;border-radius:6px;overflow:hidden}#bar i{display:block;height:100%;width:0;background:#e9a94a;transition:width .5s linear}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎵 방송 배경음 (할로윈 탐험대)</h1>
+  <p>방송용 컴퓨터에서 열어 두세요. 오르골·낮은 울림·스산한 바람 소리를 컴퓨터가 직접 만들어 냅니다(녹음·저작권 없음). 시작하면 잔잔하게 나오다가 갑자기 끊기고, 한참 조용하다가 다시 나오기를 반복해요.</p>
+
+  <div class="card">
+    <div id="state" class="rest">⏸ 시작 전</div>
+    <div id="bar"><i id="barFill"></i></div>
+    <div class="row" style="margin-top:14px">
+      <button id="start">▶ 시작</button>
+      <button class="sub" id="now">지금 틀기</button>
+      <button class="sub" id="cut">지금 끊기</button>
+      <button class="sub" id="stop">■ 완전히 멈춤</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span>음량</span><input type="range" id="vol" min="0" max="1" step="0.05"><b id="volv"></b></div>
+    <div class="row"><span>나오는 시간(초)</span><input type="number" id="pMin" min="5" max="300"> ~ <input type="number" id="pMax" min="5" max="300"></div>
+    <div class="row"><span>조용한 시간(초)</span><input type="number" id="sMin" min="5" max="600"> ~ <input type="number" id="sMax" min="5" max="600"></div>
+    <div class="row"><span>소리</span>
+      <label class="chk"><input type="checkbox" id="useBox"> 오르골</label>
+      <label class="chk"><input type="checkbox" id="useDrone"> 낮은 울림</label>
+      <label class="chk"><input type="checkbox" id="useWind"> 바람</label>
+    </div>
+    <div class="row"><span>끊기는 방식</span>
+      <label class="chk"><input type="radio" name="cutMode" value="mix"> 섞어서</label>
+      <label class="chk"><input type="radio" name="cutMode" value="snap"> 뚝 끊기</label>
+      <label class="chk"><input type="radio" name="cutMode" value="wind"> 태엽 풀리듯</label>
+    </div>
+    <p>설정은 이 컴퓨터에 저장돼요. 방송 앰프 음량은 낮게 시작해서 맞춰 주세요.</p>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const LS = 'hg_ambient';
+  const TEST = /[?&]test=1/.test(location.search);
+  const DEF = { vol: 0.5, pMin: 20, pMax: 60, sMin: 30, sMax: 90, useBox: true, useDrone: true, useWind: true, cutMode: 'mix' };
+  let cfg = Object.assign({}, DEF);
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem(LS)) || {}); } catch (e) {}
+  const save = () => { try { localStorage.setItem(LS, JSON.stringify(cfg)); } catch (e) {} };
+
+  // ---------- 화면 ↔ 설정 ----------
+  ['vol', 'pMin', 'pMax', 'sMin', 'sMax'].forEach((k) => { $(k).value = cfg[k]; });
+  ['useBox', 'useDrone', 'useWind'].forEach((k) => { $(k).checked = !!cfg[k]; });
+  document.querySelectorAll('input[name=cutMode]').forEach((r) => { r.checked = r.value === cfg.cutMode; });
+  const showVol = () => { $('volv').textContent = Math.round(cfg.vol * 100) + '%'; };
+  showVol();
+  document.querySelectorAll('input').forEach((el) => {
+    el.addEventListener('input', () => {
+      ['vol', 'pMin', 'pMax', 'sMin', 'sMax'].forEach((k) => { const v = parseFloat($(k).value); if (Number.isFinite(v)) cfg[k] = v; });
+      ['useBox', 'useDrone', 'useWind'].forEach((k) => { cfg[k] = $(k).checked; });
+      const m = document.querySelector('input[name=cutMode]:checked'); if (m) cfg.cutMode = m.value;
+      showVol(); save();
+      if (master && playing) master.gain.setTargetAtTime(cfg.vol, ctx.currentTime, 0.3);
+    });
+  });
+
+  // ---------- 소리 엔진 ----------
+  let ctx = null, master = null, reverb = null, playing = false, running = false, timer = null, wake = null, voices = [], boxTimer = null, untilT = 0, startT = 0;
+  function makeReverb(c, sec) {
+    const len = Math.floor(c.sampleRate * sec), b = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    const cv = c.createConvolver(); cv.buffer = b; return cv;
+  }
+  function ensure() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 4;
+    master.connect(comp); comp.connect(ctx.destination);
+    reverb = makeReverb(ctx, 3.5); const rg = ctx.createGain(); rg.gain.value = 0.55; reverb.connect(rg); rg.connect(master);
+  }
+  function noise(sec) { const b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; }
+
+  // 낮은 울림: 살짝 어긋난 두 저음이 천천히 맥놀이
+  function startDrone() {
+    const g = ctx.createGain(); g.gain.value = 0.0001; g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 4);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; lp.Q.value = 3;
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.06; lg.gain.value = 140; lfo.connect(lg); lg.connect(lp.frequency);
+    const oscs = [55, 55.35, 82.4].map((f, i) => { const o = ctx.createOscillator(); o.type = i === 2 ? 'triangle' : 'sawtooth'; o.frequency.value = f; o.connect(lp); return o; });
+    lp.connect(g); g.connect(master); g.connect(reverb);
+    oscs.concat([lfo]).forEach((o) => o.start());
+    voices.push({ g, nodes: oscs.concat([lfo]), pitch: oscs });
+  }
+  // 스산한 바람: 걸러 낸 잡음이 천천히 휘몰아침
+  function startWind() {
+    const n = ctx.createBufferSource(); n.buffer = noise(4); n.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 600; bp.Q.value = 1.4;
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.09; lg.gain.value = 420; lfo.connect(lg); lg.connect(bp.frequency);
+    const g = ctx.createGain(); g.gain.value = 0.0001; g.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + 5);
+    const lfo2 = ctx.createOscillator(), lg2 = ctx.createGain(); lfo2.frequency.value = 0.13; lg2.gain.value = 0.05; lfo2.connect(lg2); lg2.connect(g.gain);
+    n.connect(bp); bp.connect(g); g.connect(master);
+    [n, lfo, lfo2].forEach((x) => x.start());
+    voices.push({ g, nodes: [n, lfo, lfo2], pitch: [] });
+  }
+  // 오르골: 직접 지은 단조 자장가 선율 (가단조), 종소리처럼 빨리 사라지는 음
+  const A4 = 440, note = (semi) => A4 * Math.pow(2, semi / 12);
+  //            라  도  미  라  솔# 미  파  미   레  도  시  도  라  -  미  라
+  const TUNE = [0, 3, 7, 12, 11, 7, 8, 7, 5, 3, 2, 3, 0, null, -5, 0,
+                3, 7, 12, 15, 14, 12, 11, 8, 7, 5, 3, 2, 0, null, null, null];
+  let step = 0, nextT = 0, tempo = 1, detune = 0, boxGain = null;
+  function bell(t, f, v) {
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    [[1, 1], [2.01, 0.35], [3.98, 0.12], [5.6, 0.05]].forEach(([m, a]) => {
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sine'; o.frequency.value = f * m * Math.pow(2, detune / 1200); og.gain.value = a;
+      o.connect(og); og.connect(g); o.start(t); o.stop(t + 1.7);
+    });
+    g.connect(boxGain);
+  }
+  function startBox() {
+    boxGain = ctx.createGain(); boxGain.gain.value = 0.22; boxGain.connect(master); boxGain.connect(reverb);
+    step = Math.floor(Math.random() * 4) * 4; nextT = ctx.currentTime + 0.3; tempo = 1; detune = (Math.random() - 0.5) * 30;
+    clearInterval(boxTimer);
+    boxTimer = setInterval(() => {
+      while (nextT < ctx.currentTime + 0.25) {
+        const s = TUNE[step % TUNE.length];
+        if (s != null) bell(nextT, note(s), 0.5 + Math.random() * 0.15);
+        if (s != null && Math.random() < 0.18) bell(nextT + 0.02, note(s - 12), 0.18);   // 가끔 낮은 화음
+        nextT += 0.42 * tempo * (0.96 + Math.random() * 0.08);                          // 살짝 흔들리는 박자
+        step++;
+      }
+    }, 50);
+    voices.push({ g: boxGain, nodes: [], pitch: [], box: true });
+  }
+
+  function play(secs) {
+    ensure();
+    if (playing) return;
+    if (!cfg.useBox && !cfg.useDrone && !cfg.useWind) { setState('rest', '⚠ 소리를 하나 이상 골라 주세요'); return; }
+    playing = true; voices = [];
+    master.gain.cancelScheduledValues(ctx.currentTime);
+    master.gain.setValueAtTime(0.0001, ctx.currentTime);
+    master.gain.exponentialRampToValueAtTime(Math.max(0.0002, cfg.vol), ctx.currentTime + 1.2 + Math.random() * 2);   // 잔잔하게 들어옴
+    if (cfg.useDrone) startDrone();
+    if (cfg.useWind) startWind();
+    if (cfg.useBox) startBox();
+    startT = Date.now(); untilT = startT + secs * 1000;
+    setState('play', '🎵 나오는 중');
+    clearTimeout(timer); timer = setTimeout(() => cut(), secs * 1000);
+  }
+  function cut(force) {
+    if (!playing) return;
+    const mode = cfg.cutMode === 'mix' ? (Math.random() < 0.5 ? 'snap' : 'wind') : cfg.cutMode;
+    const t = ctx.currentTime;
+    if (mode === 'wind' && !force) {
+      // 태엽이 풀리듯: 2.5초 동안 느려지고 음이 내려가다 멈춤
+      const slow = setInterval(() => { tempo *= 1.12; detune -= 22; }, 200);
+      voices.forEach((v) => v.pitch.forEach((o) => o.frequency.exponentialRampToValueAtTime(o.frequency.value * 0.6, t + 2.5)));
+      master.gain.setTargetAtTime(0.0001, t + 1.6, 0.35);
+      setTimeout(() => { clearInterval(slow); teardown(); }, 2800);
+    } else {
+      master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.linearRampToValueAtTime(0.0001, t + 0.04);   // 뚝
+      setTimeout(teardown, 120);
+    }
+    playing = false;
+    clearTimeout(timer);
+    if (running && !force) {
+      const rest = rnd(cfg.sMin, cfg.sMax);
+      startT = Date.now(); untilT = startT + rest * 1000;
+      setState('rest', '🤫 조용한 시간');
+      timer = setTimeout(() => play(rnd(cfg.pMin, cfg.pMax)), rest * 1000);
+    } else setState('rest', running ? '🤫 조용한 시간' : '⏸ 멈춤');
+  }
+  function teardown() {
+    clearInterval(boxTimer); boxTimer = null;
+    voices.forEach((v) => { v.nodes.forEach((n) => { try { n.stop(); } catch (e) {} }); try { v.g.disconnect(); } catch (e) {} });
+    voices = [];
+  }
+  const rnd = (a, b) => { a = Math.max(TEST ? 1 : 5, +a || 5); b = Math.max(a, +b || a); return TEST ? Math.min(3, a + Math.random() * (b - a)) : a + Math.random() * (b - a); };
+  function setState(cls, text) { $('state').className = cls; $('state').textContent = text; }
+  setInterval(() => { const total = untilT - startT; $('barFill').style.width = total > 0 ? Math.min(100, (Date.now() - startT) / total * 100) + '%' : '0'; }, 500);
+
+  $('start').onclick = async () => {
+    ensure(); running = true;
+    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    if (!playing) { const rest = TEST ? 1 : 3; startT = Date.now(); untilT = startT + rest * 1000; setState('rest', '🤫 곧 시작해요'); clearTimeout(timer); timer = setTimeout(() => play(rnd(cfg.pMin, cfg.pMax)), rest * 1000); }
+  };
+  $('now').onclick = () => { ensure(); if (!playing) { clearTimeout(timer); play(rnd(cfg.pMin, cfg.pMax)); } };
+  $('cut').onclick = () => cut();
+  $('stop').onclick = () => { running = false; clearTimeout(timer); if (playing) cut(true); setState('rest', '⏸ 멈춤'); untilT = startT = 0; };
+  window.__ambient = { get playing() { return playing; }, get running() { return running; } };
+})();
+</script>
+</body>
+</html>
