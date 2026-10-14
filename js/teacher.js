@@ -80,6 +80,7 @@
     Intensity.render(el, roster.settings, {
       stationCount: roster.stations.filter((s) => s.ghost).length,
       stations: roster.stations,
+      rawStations: roster.raw,
       onStop: stopPreview,
       onPreview: async (o, lv, which) => {
         const LV = ['너무', '조금', '안무서움'];
@@ -192,6 +193,7 @@
       h += '</tr>';
     });
     $('progress').innerHTML = h;
+    renderGallery();
 
     const feed = list.slice(-30).reverse().map((r) => {
       const t = new Date(r['시각']);
@@ -205,6 +207,57 @@
     $('queue').innerHTML = q.map((r) => `<li>${r['조']}조 · ${esc(r['장소이름'])} · ${esc(r['파일명'])}${editing.now === r['파일ID'] ? ' <b>(편집 중)</b>' : ''}</li>`).join('') || '<li>수정할 영상이 없어요</li>';
     chip('chipEdit', editing.now ? '편집 중' : `편집 대기 ${q.length} · 완료 ${editing.done}${editing.failed ? ' · 실패 ' + editing.failed : ''}`, editing.now ? 'busy' : q.length ? '' : 'ok');
   }
+
+  // ---------- 사진·영상 모아 보기 ----------
+  const galRows = () => {
+    const g = $('galGroup').value, k = $('galKind').value;
+    return rows.filter(Boolean).filter((r) => r['파일ID'] && (!g || String(r['조']) === g)
+      && (!k || (k === '놀람' ? /놀람/.test(String(r['파일명'] || '')) : r['구분'] === k)));
+  };
+  function renderGallery() {
+    if (!roster) return;
+    const sel = $('galGroup'), cur = sel.value, groups = [...new Set(rows.filter(Boolean).map((r) => String(r['조'])).filter(Boolean))].sort((a, b) => a - b);
+    sel.innerHTML = '<option value="">전체</option>' + groups.map((g) => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>${esc(g)}조</option>`).join('');
+    if (roster.folderUrl) { $('galFolder').href = roster.folderUrl; $('galFolder').hidden = false; }
+    const list = galRows().slice().reverse();
+    $('gallery').innerHTML = list.map((r) => {
+      const t = new Date(r['시각']), when = isNaN(t) ? '' : `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+      const icon = r['종류'] === '영상' ? '🎬' : '📷', react = /놀람/.test(String(r['파일명'] || '')) ? ' 😱' : '';
+      return `<li><span>${icon}${react} <b>${esc(r['조'])}조</b> · ${esc(r['장소이름'])} · ${esc(r['구분'])} <small style="color:#8c91a3">${when}</small></span>
+        <span><button data-view="${esc(r['파일ID'])}">보기</button> <a href="https://drive.google.com/file/d/${encodeURIComponent(r['파일ID'])}/view" target="_blank" rel="noopener">드라이브</a></span></li>`;
+    }).join('') || '<li>아직 올라온 사진·영상이 없어요</li>';
+    $('galStatus').textContent = `${list.length}개`;
+  }
+  async function fetchFile(id) {
+    const f = await get({ action: 'file', id });
+    return { name: f.name, blob: b64ToBlob(f.data, f.mime) };
+  }
+  let galUrl = '';
+  async function viewFile(id) {
+    const r = rows.find((x) => x && x['파일ID'] === id) || {};
+    $('galMedia').innerHTML = '불러오는 중...'; $('galCap').textContent = `${r['조'] || ''}조 · ${r['장소이름'] || ''} · ${r['파일명'] || ''}`; $('galModal').hidden = false;
+    try {
+      const { blob } = await fetchFile(id);
+      if (galUrl) URL.revokeObjectURL(galUrl); galUrl = URL.createObjectURL(blob);
+      $('galMedia').innerHTML = /^video\//.test(blob.type) ? `<video src="${galUrl}" controls autoplay playsinline></video>` : `<img src="${galUrl}" alt="">`;
+    } catch (e) { $('galMedia').textContent = '불러오기 실패: ' + e.message; }
+  }
+  async function zipGallery() {
+    const list = galRows();
+    if (!list.length) return status('galStatus', '받을 파일이 없어요', 'err');
+    if (!window.JSZip) return status('galStatus', 'ZIP 기능을 불러오지 못했어요', 'err');
+    const zip = new JSZip(); let n = 0, fail = 0;
+    for (const r of list) {
+      status('galStatus', `내려받는 중 ${n + fail + 1}/${list.length}...`);
+      try { const f = await fetchFile(r['파일ID']); zip.file(`${r['조']}조/${f.name || r['파일명']}`, f.blob); n++; } catch (e) { fail++; }
+    }
+    const out = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'), g = $('galGroup').value;
+    a.href = URL.createObjectURL(out); a.download = `할로윈사진_${g ? g + '조' : '전체'}_${new Date().toISOString().slice(0, 10)}.zip`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    status('galStatus', `ZIP 완료: ${n}개${fail ? ` (실패 ${fail}개)` : ''}`, fail ? 'err' : 'ok');
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) viewFile(b.dataset.view); });
 
   // ---------- 영상 편집 ----------
   function pendingEdits() {
@@ -307,6 +360,9 @@
   // ---------- 시작 ----------
   $('inUrl').value = conf.apiUrl || '';
   $('inKey').value = conf.apiKey || '';
+  $('galGroup').onchange = renderGallery; $('galKind').onchange = renderGallery;
+  $('btnGalZip').onclick = zipGallery;
+  $('galClose').onclick = () => { const v = $('galMedia').querySelector('video'); if (v) v.pause(); $('galModal').hidden = true; };
   $('btnConnect').onclick = async () => {
     conf = { apiUrl: $('inUrl').value.trim(), apiKey: $('inKey').value.trim() };
     try { localStorage.setItem(LS, JSON.stringify(conf)); } catch (e) {}

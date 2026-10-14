@@ -25,7 +25,7 @@
         { id: 'library', name: '도서관', kind: 'mission', story: 'type:책찾기',
           mission: '도서관 어딘가에 있는 {책}을 찾아요! 찾으면 책을 들고 다 함께 모여 📸 버튼을 눌러요. 5초 뒤에 찰칵!',
           clue: '다음은 6학년 교실 앞으로!' },
-        { id: 'class6', name: '6학년 교실 앞', kind: 'mission', story: 'type:탁구공',
+        { id: 'class6', name: '6학년 교실 앞', kind: 'mission', story: 'course',
           mission: '컵에 탁구공 넣기! 탁구공을 던져 컵에 3개를 넣으면 성공! 성공하면 컵 앞에 모여 📸 버튼을 눌러요. 5초 뒤에 찰칵!',
           clue: '다음은 운동장 창고 앞으로! 밖은 어두우니 손전등을 켜고 천천히.' },
         { id: 'storage', name: '창고 앞', kind: 'photo', story: 'id',
@@ -53,11 +53,34 @@
   };
   const on = (settings) => modeOf(settings) !== '미션';
   const course = (settings) => (on(settings) ? COURSES[modeOf(settings)] : null);
+  // 마동 코스에 넣을 수 있는 모든 장소: 두 코스의 장소 + 시트 장소 탭의 장소
+  function catalog(raw) {
+    const map = new Map();
+    COURSES['코스'].places.forEach((p) => map.set(p.id, p));
+    COURSES['인증샷'].places.forEach((p) => { if (!map.has(p.id)) map.set(p.id, p); });
+    (raw || []).forEach((s) => { if (s && s.id && !map.has(s.id)) map.set(s.id, { id: s.id, name: s.name || s.id, kind: 'photo', story: 'id' }); });
+    return [...map.values()];
+  }
+  const josa = (w) => { const c = String(w).trim().slice(-1).charCodeAt(0) - 0xac00; return c >= 0 && c <= 11171 && c % 28 && c % 28 !== 8 ? '으로' : '로'; };
+  /** 관리자가 고른 마동 코스 장소(설정 "코스장소" = 장소id 를 쉼표로, 순서대로). 비우면 기본 5곳 */
+  function coursePlaces(settings, raw) {
+    const ids = String((settings || {})['코스장소'] || '').split(/[,\s]+/).filter(Boolean);
+    const base = COURSES['코스'].places;
+    if (!ids.length) return base;
+    const cat = new Map(catalog(raw).map((p) => [p.id, p]));
+    const list = ids.map((id) => cat.get(id)).filter(Boolean);
+    return list.map((p, i) => {
+      const next = list[i + 1], b = base.findIndex((q) => q.id === p.id);
+      const sameNext = b >= 0 && (next ? base[b + 1] && base[b + 1].id === next.id : b === base.length - 1);
+      const clue = sameNext && p.clue ? p.clue : next ? `다음은 ${next.name}${josa(next.name)}!` : '마지막 장소였어요! 강당으로 돌아가요.';
+      return Object.assign({}, p, { clue });
+    });
+  }
 
   window.HG_TOUR = {
     COURSES,
     get PLACES() { return COURSES['코스'].places; },
-    on, modeOf, course,
+    on, modeOf, course, catalog, coursePlaces,
     /** 시트 장소 목록(raw) → 지금 운영방식에서 쓰는 장소 목록 */
     stations(raw, settings) {
       raw = raw || [];
@@ -67,7 +90,8 @@
       const byId = {};
       raw.forEach((s) => { byId[s.id] = s; });
       const book = String(settings['찾을책'] || '').trim();
-      return c.places.map((p) => {
+      const places = modeOf(settings) === '코스' ? coursePlaces(settings, raw) : c.places;
+      return places.map((p) => {
         const r = byId[p.id] || {};
         const base = String(settings['미션_' + p.id] || '').trim() || p.mission || `${p.name}에서 다 함께 인증샷! ${SHOT}`;
         return {

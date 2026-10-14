@@ -1,9 +1,139 @@
 {
   "ghosts": [
-    { "file": "ghost-white.png", "kind": "full", "height": [0.34, 0.5], "stations": ["library", "storage", "class6", "stairs", "hall2", "english"] },
-    { "file": "ghost-school.png", "kind": "full", "height": [0.32, 0.46], "stations": ["class6", "class1", "library", "hall2"] },
-    { "file": "ghost-child.png", "kind": "full", "height": [0.24, 0.36], "stations": ["class1", "storage", "stairs"] },
-    { "file": "ghost-labcoat.png", "kind": "full", "height": [0.34, 0.5], "stations": ["science"] },
-    { "file": "ghost-face.png", "kind": "face", "height": [0.16, 0.24] }
+    {
+      "file": "ghost-child.png",
+      "kind": "full",
+      "height": [
+        0.24,
+        0.36
+      ],
+      "stations": [
+        "class1",
+        "storage",
+        "stairs"
+      ],
+      "who": "탑을 못 쌓은 아이 / 숨바꼭질 아이"
+    },
+    {
+      "file": "ghost-girl-peek.png",
+      "kind": "full",
+      "height": [
+        0.24,
+        0.36
+      ],
+      "stations": [
+        "class1",
+        "storage"
+      ],
+      "who": "내다보는 여자아이"
+    },
+    {
+      "file": "ghost-labcoat.png",
+      "kind": "full",
+      "height": [
+        0.34,
+        0.5
+      ],
+      "stations": [
+        "science"
+      ],
+      "who": "하얀 가운의 옛 과학 선생님"
+    },
+    {
+      "file": "ghost-librarian.png",
+      "kind": "full",
+      "height": [
+        0.34,
+        0.5
+      ],
+      "stations": [
+        "library"
+      ],
+      "who": "책을 기다리는 사서 언니"
+    },
+    {
+      "file": "ghost-white.png",
+      "kind": "full",
+      "height": [
+        0.34,
+        0.5
+      ],
+      "stations": [
+        "library",
+        "hall2",
+        "english"
+      ],
+      "who": "긴 머리 언니"
+    },
+    {
+      "file": "ghost-boy-ball.png",
+      "kind": "full",
+      "height": [
+        0.32,
+        0.46
+      ],
+      "stations": [
+        "class6",
+        "stairs"
+      ],
+      "who": "탁구공 남학생"
+    },
+    {
+      "file": "ghost-school.png",
+      "kind": "full",
+      "height": [
+        0.32,
+        0.46
+      ],
+      "stations": [
+        "hall2",
+        "english"
+      ],
+      "who": "옛 교복 여학생"
+    },
+    {
+      "file": "ghost-face.png",
+      "kind": "face",
+      "height": [
+        0.16,
+        0.24
+      ],
+      "stations": [
+        "library",
+        "science",
+        "hall2",
+        "english"
+      ],
+      "who": "젖은 긴 머리 여자 얼굴"
+    },
+    {
+      "file": "ghost-face-boy.png",
+      "kind": "face",
+      "height": [
+        0.16,
+        0.24
+      ],
+      "stations": [
+        "class1",
+        "class6",
+        "storage",
+        "stairs"
+      ],
+      "who": "남자아이 얼굴"
+    },
+    {
+      "file": "ghost-face-grandma.png",
+      "kind": "face",
+      "height": [
+        0.16,
+        0.24
+      ],
+      "stations": [
+        "stairs",
+        "hall2",
+        "english"
+      ],
+      "who": "할머니 얼굴"
+    }
   ]
 }

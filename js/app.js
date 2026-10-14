@@ -827,7 +827,7 @@
   async function playJumpFace() {
     const v = $('camVideo'), c = $('camGhost');
     if (!c || !stream) return false;
-    const face = GhostFree.jumpFace(await loadFree());
+    const face = GhostFree.jumpFace(await loadFree(), (station() || {}).id);
     if (!face || !stream) return false;
     c.width = v.videoWidth; c.height = v.videoHeight;
     c.classList.remove('mirror');
@@ -1342,6 +1342,7 @@
     Intensity.render($('intensityPanel'), cache.settings, {
       stationCount: ghostStations().length,
       stations: cache.stations,
+      rawStations: cache.raw,
       onStop: stopNarration,
       samplePreview: true,
       onPreview: async (o, lv, which) => {

@@ -65,7 +65,7 @@
     offIds: (st) => String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean),
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
-    render(el, st, { onSave, onPreview, onStop, stationCount, stations } = {}) {
+    render(el, st, { onSave, onPreview, onStop, stationCount, stations, rawStations } = {}) {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const max = Math.max(1, stationCount || 4);
       const sel = (k) => `<select data-k="${k}">${Array.from({ length: max + 1 }, (_, i) => `<option value="${i}"${String(i) === get(st, k) ? ' selected' : ''}>${i}곳</option>`).join('')}</select>`;
@@ -137,7 +137,15 @@
   <div class="int-row"><span>귀신 넣는 방법</span>
     <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 어두운 곳에 귀신 그림을 자동으로 놓기 (화면 귀신은 늘 이 방식)</label>
   </div>
-  ${stations && stations.length ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
+  ${window.HG_TOUR && HG_TOUR.modeOf(st) === '코스' ? (() => {
+      const cur = HG_TOUR.coursePlaces(st, rawStations || []), curIds = cur.map((p) => p.id);
+      const rest = HG_TOUR.catalog(rawStations || []).filter((p) => !curIds.includes(p.id));
+      const row = (p, on) => `<li class="int-crow" data-cid="${esc(p.id)}"><label class="int-chk"><input type="checkbox" class="int-cuse"${on ? ' checked' : ''}> ${esc(p.name)} <small style="color:#8c91a3">(${esc(p.id)})</small></label><button type="button" class="int-cup">▲</button><button type="button" class="int-cdown">▼</button></li>`;
+      return `<div class="int-row"><span>마동 코스 장소</span><div style="flex:1;min-width:260px"><ol class="int-course">${cur.map((p) => row(p, true)).join('')}${rest.map((p) => row(p, false)).join('')}</ol>
+        <button type="button" class="int-cdefault">↩ 기본 코스(5곳)로</button></div></div>
+      <p class="int-help">체크한 장소를 위에서부터 순서대로 돕니다. ▲▼로 순서를 바꾸고, 체크를 켜면 추가·끄면 삭제돼요. 시트에 없는 장소도 넣을 수 있어요. 💾 저장 후 태블릿마다 장소를 다시 골라 주세요.</p>`;
+    })() : ''}
+  ${stations && stations.length && !(window.HG_TOUR && HG_TOUR.modeOf(st) === '코스') ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
     ${stations.map((s) => `<label class="int-chk"><input type="checkbox" data-use="${esc(s.id)}"${api.offIds(st).includes(s.id) ? '' : ' checked'}> ${esc(s.name)}</label>`).join('')}
   </div>
   <p class="int-help">체크를 끈 장소는 귀신 배정과 진행판에서 빠집니다. 동선 안내(다음 장소 단서)는 시트 "장소" 탭의 단서 칸에서 고쳐 주세요.</p>` : ''}
@@ -181,6 +189,8 @@
         const md = el.querySelector('input[name="int-mode"]:checked'); if (md) o['운영방식'] = md.value;
         const gv = el.querySelector('input[name="int-gview"]:checked'); if (gv) o['귀신보기'] = gv.value;
         const rc = el.querySelector('input[name="int-react"]:checked'); if (rc) o['놀람촬영'] = rc.value;
+        const crows = el.querySelectorAll('.int-crow');
+        if (crows.length) { o['코스장소'] = [...crows].filter((r) => r.querySelector('.int-cuse').checked).map((r) => r.dataset.cid).join(','); o['쉬는장소'] = ''; }
         const use = el.querySelectorAll('input[data-use]');
         if (use.length) o['쉬는장소'] = [...use].filter((c) => !c.checked).map((c) => c.dataset.use).join(',');
         return o;
@@ -212,6 +222,22 @@
         el.querySelector('.int-pin1').value = ''; el.querySelector('.int-pin2').value = '';
         save({ '관리자PIN': a }, '교사 모드 비밀번호를 바꿨어요. 모든 태블릿에 1분 안에 적용돼요.');
       };
+      // 코스 장소 순서 바꾸기
+      el.querySelectorAll('.int-cup, .int-cdown').forEach((b) => {
+        b.onclick = () => {
+          const li = b.closest('li'), up = b.classList.contains('int-cup');
+          const sib = up ? li.previousElementSibling : li.nextElementSibling;
+          if (sib) li.parentNode.insertBefore(li, up ? sib : sib.nextElementSibling);
+        };
+      });
+      const cdef = el.querySelector('.int-cdefault');
+      if (cdef) cdef.onclick = () => {
+        const ol = el.querySelector('.int-course'), base = HG_TOUR.COURSES['코스'].places.map((p) => p.id);
+        const rows = [...ol.children];
+        rows.sort((a, b) => { const ia = base.indexOf(a.dataset.cid), ib = base.indexOf(b.dataset.cid); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+        rows.forEach((r) => { r.querySelector('.int-cuse').checked = base.includes(r.dataset.cid); ol.appendChild(r); });
+        msg('기본 코스로 채웠어요. 💾 저장을 눌러야 적용돼요.');
+      };
       // 무서움 단계 표(귀신 수·은은한 소리·큰 소리·깜짝 얼굴)만 기본값으로 채운다. 저장을 눌러야 적용
       el.querySelector('.int-reset').onclick = () => {
         LEVELS.forEach((l) => {
@@ -238,6 +264,7 @@
 .int-t th{color:#a9aec0;font-weight:700}.int select{padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px;width:auto}
 .int-chk{display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:14px;color:#e8eaf0;cursor:pointer}.int-chk input{width:auto}
 .int-help{font-size:13px;color:#a9aec0;margin:6px 0 12px}.int-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.int-row>span:first-child{font-size:14px;color:#a9aec0;min-width:150px}
+.int-course{margin:0;padding-left:22px}.int-course li{display:flex;align-items:center;gap:6px;margin:4px 0}.int-course li button{padding:3px 9px;font-size:12px;background:#252935;color:#e8eaf0}
 .int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}

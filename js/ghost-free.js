@@ -108,7 +108,7 @@
       try { await GhostEngine.init({ base: opts.base || './' }); mask = await GhostEngine.utils.personMask(photo); } catch (e) { mask = null; }
     }
     const a = analyse(photo, mask);
-    // 장소에 어울리는 귀신(stations 에 그 장소가 있거나 stations 가 없는 귀신) 중에서 고른다
+    // 장소 이야기에 맞는 귀신(stations 에 그 장소가 있거나 stations 가 없는 귀신) 중에서 고른다
     const pref = lib.ghosts.filter((g) => !g.stations || (opts.stationId && g.stations.includes(opts.stationId)));
     const pool = (pref.length ? pref : lib.ghosts).slice().sort(() => rnd() - 0.5);
     let g = null, spot = null;
@@ -176,8 +176,11 @@
   }
 
   /** 깜짝 얼굴: 얼굴 귀신 그림을 화면 가득 쓸 수 있게 흑백·고대비로 만든다 */
-  function jumpFace(lib) {
-    const g = (lib && lib.ghosts || []).find((x) => x.kind === 'face') || (lib && lib.ghosts || [])[0];
+  function jumpFace(lib, stationId) {
+    const all = (lib && lib.ghosts) || [], faces = all.filter((x) => x.kind === 'face');
+    const mine = faces.filter((x) => !x.stations || (stationId && x.stations.includes(stationId)));
+    const pool = mine.length ? mine : faces.length ? faces : all;
+    const g = pool[Math.floor(Math.random() * pool.length)];
     if (!g) return null;
     const c = canvas(g.image.width, g.image.height), x = c.getContext('2d');
     x.filter = 'grayscale(1) contrast(1.45) brightness(0.92)';

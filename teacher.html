@@ -42,6 +42,12 @@ td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
 .status{font-size:13px;padding:7px 10px;border-radius:8px;background:#252935;margin-top:8px}
 .status.ok{background:#173524;color:var(--ok)}.status.err{background:#3d1820;color:var(--bad)}
 .bar{height:8px;border-radius:6px;background:#252935;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;width:0;background:var(--gold)}
+.gallery{list-style:none;margin:10px 0 0;padding:0;max-height:420px;overflow:auto;border-top:1px solid #2e3240}
+.gallery li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #2e3240;font-size:14px}
+.gallery li button,.gallery li a{font-size:13px;padding:5px 10px}
+.gal-modal{position:fixed;inset:0;background:#000c;display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.gal-modal[hidden]{display:none}.gal-box{background:#181b22;border-radius:12px;padding:12px;max-width:min(960px,100%)}
+.gal-box img,.gal-box video{display:block;max-width:100%;max-height:75vh;border-radius:8px}
 </style>
 </head>
 <body>
@@ -73,6 +79,19 @@ td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
         <p class="help">😱 너무 무서움 · 😬 조금 · 😎 안 무서움(소리+수정 2곳) · ✅ 성공 · ❌ 실패 · 👻 수정 장소 · ★ 수정본 완료 · ⏳ 수정 대기</p>
         <div class="tablewrap"><table id="progress"></table></div>
       </section>
+      <section class="panel">
+        <h2>📷 사진·영상 모아 보기</h2>
+        <p class="hint">태블릿에서 찍은 사진·영상은 와이파이가 되면 자동으로 구글 드라이브에 올라오고, 여기 목록에 나타나요. 눌러서 보거나 한 번에 내려받을 수 있어요.</p>
+        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">
+          <label class="field" style="min-width:140px"><span>조</span><select id="galGroup"><option value="">전체</option></select></label>
+          <label class="field" style="min-width:140px"><span>종류</span><select id="galKind"><option value="">전체</option><option value="원본">원본</option><option value="수정본">수정본</option><option value="놀람">놀람 장면만</option></select></label>
+          <button id="btnGalZip" style="margin-top:8px">⬇ 보이는 파일 ZIP으로 받기</button>
+          <a id="galFolder" target="_blank" rel="noopener" style="margin-top:8px" hidden>📁 드라이브 폴더 열기</a>
+        </div>
+        <div class="status" id="galStatus">-</div>
+        <ul class="gallery" id="gallery"></ul>
+      </section>
+      <div id="galModal" class="gal-modal" hidden><div class="gal-box"><div id="galMedia"></div><div class="row" style="justify-content:space-between;margin-top:8px"><span id="galCap"></span><button id="galClose">닫기</button></div></div></div>
       <section class="panel">
         <h2>무서움 강도 설정</h2>
         <p class="help">출발할 때 학생들이 고른 답에 따라 귀신과 소리를 다르게 합니다. 저장하면 모든 태블릿이 1분 안에 따릅니다.</p>
@@ -108,12 +127,13 @@ td.names{white-space:normal;color:var(--tx2);font-size:13px;min-width:120px}
     </aside>
   </div>
 </main>
-<script src="js/ghost-engine.js?v=20261015000024"></script>
-<script src="js/sfx.js?v=20261015000024"></script>
-<script src="js/intensity.js?v=20261015000024"></script>
-<script src="js/tour.js?v=20261015000024"></script>
-<script src="js/stories.js?v=20261015000024"></script>
-<script src="js/story-editor.js?v=20261015000024"></script>
-<script src="js/teacher.js?v=20261015000024"></script>
+<script src="js/ghost-engine.js?v=20261015001021"></script>
+<script src="js/sfx.js?v=20261015001021"></script>
+<script src="vendor/jszip/jszip.min.js"></script>
+<script src="js/intensity.js?v=20261015001021"></script>
+<script src="js/tour.js?v=20261015001021"></script>
+<script src="js/stories.js?v=20261015001021"></script>
+<script src="js/story-editor.js?v=20261015001021"></script>
+<script src="js/teacher.js?v=20261015001021"></script>
 </body>
 </html>
