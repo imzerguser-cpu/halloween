@@ -284,9 +284,11 @@
     if (!j.ok) throw new Error(j.error || 'upload');
   }
   let uploading = false;
+  let uploadAgain = false;
   async function uploadPending(report) {
-    if (uploading || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return 0;
-    uploading = true;
+    if (uploading) { uploadAgain = true; return 0; }                       // 올리는 중에 새로 찍은 것도 이어서 올린다
+    if (!conf.apiUrl || !conf.apiKey || !navigator.onLine) return 0;
+    uploading = true; uploadAgain = false;
     let n = 0, fail = 0;
     try {
       const recs = (await db.all()).filter(needsUpload);
@@ -298,6 +300,7 @@
         if (report) setStatus('galStatus', `올리는 중... ${n}개 완료${fail ? `, ${fail}개 실패` : ''}`);
       }
     } finally { uploading = false; }
+    if (uploadAgain) { uploadAgain = false; setTimeout(() => uploadPending(false), 300); }
     return { n, fail };
   }
   const needsUpload = (r) => !r.hold && (!r.up.orig || (r.composite && !r.up.comp));

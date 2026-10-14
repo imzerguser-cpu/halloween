@@ -134,6 +134,76 @@
         "english"
       ],
       "who": "할머니 얼굴"
+    },
+    {
+      "file": "ghost-sobok.png",
+      "kind": "full",
+      "height": [
+        0.34,
+        0.5
+      ],
+      "stations": [
+        "library",
+        "hall2",
+        "english",
+        "stairs"
+      ],
+      "who": "소복 입은 긴 머리 여자"
+    },
+    {
+      "file": "ghost-boy-student.png",
+      "kind": "full",
+      "height": [
+        0.32,
+        0.46
+      ],
+      "stations": [
+        "class6",
+        "stairs",
+        "hall2"
+      ],
+      "who": "옛 교복 남학생"
+    },
+    {
+      "file": "ghost-man.png",
+      "kind": "full",
+      "height": [
+        0.36,
+        0.52
+      ],
+      "stations": [
+        "science",
+        "stairs"
+      ],
+      "who": "옛 과학 선생님(평상복)"
+    },
+    {
+      "file": "ghost-face-egg.png",
+      "kind": "face",
+      "height": [
+        0.16,
+        0.24
+      ],
+      "stations": [
+        "library",
+        "hall2",
+        "english"
+      ],
+      "who": "달걀귀신"
+    },
+    {
+      "file": "ghost-face-slit.png",
+      "kind": "face",
+      "height": [
+        0.16,
+        0.24
+      ],
+      "stations": [
+        "library",
+        "stairs",
+        "english"
+      ],
+      "who": "입이 귀까지 찢어진 여자"
     }
   ]
 }
