@@ -18,7 +18,7 @@
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
-    '운영방식': '인증샷', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '연사'
+    '운영방식': '코스', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '연사'
   };
   function get(st, k) {
     st = st || {};
@@ -119,10 +119,10 @@
   <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
   <div class="int-row"><span>운영 방식</span>
-    <label class="int-chk"><input type="radio" name="int-mode" value="인증샷"${get(st, '운영방식') !== '미션' ? ' checked' : ''}> 장소별 인증샷 투어 (1학년 교실 → 2층 복도 → 도서관 → 6학년 교실 → 중앙계단 → 과학실 → 영어체험실, 장소마다 이야기 + 단체 인증샷)</label>
-    <label class="int-chk"><input type="radio" name="int-mode" value="미션"${get(st, '운영방식') === '미션' ? ' checked' : ''}> 장소별 미션 (예전 방식: 시트 "장소" 탭의 장소·미션)</label>
+    ${(() => { const m = window.HG_TOUR ? HG_TOUR.modeOf(st) : get(st, '운영방식'); const opts = (window.HG_TOUR ? Object.keys(HG_TOUR.COURSES).map((k) => [k, HG_TOUR.COURSES[k].label]) : []).concat([['미션', '장소별 미션 (예전 방식: 시트 "장소" 탭의 장소·미션, 영상 미션 포함)']]);
+      return opts.map(([v, t]) => `<label class="int-chk" style="display:flex"><input type="radio" name="int-mode" value="${v}"${m === v ? ' checked' : ''}> ${esc(t)}</label>`).join(''); })()}
   </div>
-  <p class="int-help">운영 방식을 바꿔 저장하면 장소 목록이 바뀝니다. 태블릿마다 교사 모드에서 장소를 다시 골라 주세요. 인증샷 투어에서는 아래 촬영 방법과 관계없이 사진 인증샷(5초 카운트다운)으로 찍습니다.</p>
+  <p class="int-help">운영 방식을 바꿔 저장하면 장소 목록이 바뀝니다. 태블릿마다 교사 모드에서 장소를 다시 골라 주세요. 마동 코스·인증샷 투어에서는 아래 촬영 방법과 관계없이 사진 인증샷(5초 카운트다운)으로 찍습니다. 미션 문구는 시트 설정 탭의 미션_장소id(예: 미션_class6), 도서관에서 찾을 책은 찾을책 에 적으면 바뀝니다.</p>
   <div class="int-row"><span>촬영 방법 (미션 방식)</span>
     <label class="int-chk"><input type="radio" name="int-shot" value="미션대로"${get(st, '촬영방식') !== '사진' ? ' checked' : ''}> 미션대로 (스태킹·탁구공은 영상, 동상은 연속사진)</label>
     <label class="int-chk"><input type="radio" name="int-shot" value="사진"${get(st, '촬영방식') === '사진' ? ' checked' : ''}> 모든 장소 사진 인증샷 (5초 카운트다운 뒤 찰칵)</label>

@@ -400,7 +400,7 @@
     $('storyGroup').textContent = cur.group + '조';
     $('storyTitle').textContent = pg.title ? (pg.title === '오늘 밤의 이야기' ? '📜 ' + pg.title : '「' + pg.title + '」') : '';
     $('storyText').textContent = pg.text;
-    $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : tourOn() ? '인증샷 찍으러 가기 ▶' : '미션 보기 ▶';
+    $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : isMissionPlace(station()) ? '미션 보기 ▶' : '인증샷 찍으러 가기 ▶';
     const box = $('storyText'); box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
     show('scrStory');
     narrate(pg.text);
@@ -519,8 +519,9 @@
   function prologueText(level) {
     const lv = level == null ? 1 : level;
     const custom = setting('프롤로그_' + FEAR_KEY[lv], '');
-    const tour = window.HG_TOUR && HG_TOUR.on(cache.settings) && window.HG_STORIES && HG_STORIES.prologueTour;
-    return custom || ((window.HG_STORIES && (tour ? HG_STORIES.prologueTour : HG_STORIES.prologue)[lv]) || '');
+    const c = window.HG_TOUR && HG_TOUR.course(cache.settings), S = window.HG_STORIES;
+    const list = S && ((c && S[c.prologue]) || S.prologue);
+    return custom || ((list && list[lv]) || '');
   }
   const storyDef = (s) => (window.HG_STORIES && HG_STORIES.defFor ? HG_STORIES.defFor(s) : null);
   function stationStory(s) {
@@ -540,6 +541,7 @@
     '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요! 사진을 몇 장 연달아 찍어요.' }
   };
   const tourOn = () => !!(window.HG_TOUR && HG_TOUR.on(cache.settings));
+  const isMissionPlace = (s) => !tourOn() || (s && s.kind === 'mission');   // 코스의 미션 장소 / 예전 미션 방식
   const photoOnly = () => !!(window.Intensity && Intensity.photoOnly(cache.settings));
   const stType = () => {
     const t = String(station().type || '사진').trim();
@@ -574,12 +576,12 @@
     const s = station(), t = stType();
     stopNarration();
     $('misStory').hidden = true;
-    $('misStation').textContent = tourOn() ? '📸 ' + s.name + ' 인증샷' : '🎯 ' + s.name + ' 미션';
+    $('misStation').textContent = isMissionPlace(s) ? '🎯 ' + s.name + ' 미션' : '📸 ' + s.name + ' 인증샷';
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     showPlaceImg($('misPlace'), s.id, $('misPlaceFig'));
     $('misGroup').textContent = cur.group + '조';
-    $('misLead').textContent = tourOn() ? '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!' : TYPE[t].lead;
-    $('btnOpenCam').textContent = TYPE[t].btn;
+    $('misLead').textContent = tourOn() ? (isMissionPlace(s) ? '미션을 성공하면 모두 화면에 들어오게 모여 버튼을 눌러요. 5초 뒤에 찰칵!' : '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!') : TYPE[t].lead;
+    $('btnOpenCam').textContent = tourOn() ? '📸 인증샷 찍으러 가기' : TYPE[t].btn;
     show('scrMission');
   }
   // 칠판 신호: 이 장소의 전자칠판(board.html)이 분필 글씨를 쓰게 한다 (기다리지 않음)
@@ -1112,7 +1114,7 @@
     $('resGroup').textContent = rec.group + '조';
     $('resPhoto').hidden = true; $('resVideo').hidden = true; $('resVideo').removeAttribute('src');
     $('resPhotoBox').hidden = true; $('resBurst').hidden = true; $('resCount').hidden = true;
-    let title = tourOn() ? '🎉 인증샷 완료!' : '🎉 미션 성공!', msg = res.video ? '영상이 저장됐어요' : '사진이 저장됐어요', success = true;
+    let title = isMissionPlace(station()) ? '🎉 미션 성공!' : '🎉 인증샷 완료!', msg = res.video ? '영상이 저장됐어요' : '사진이 저장됐어요', success = true;
 
     if (mode === '숨김') {
       msg = (res.video ? '🎬 영상이' : '📸 사진이') + ' 안전하게 저장됐어요! 나중에 선생님과 함께 봐요.';

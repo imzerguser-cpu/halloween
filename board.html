@@ -52,7 +52,7 @@
     <div id="msg"></div>
   </div>
 </div>
-<script src="js/tour.js?v=20261014002529"></script>
+<script src="js/tour.js?v=20261014235219"></script>
 <script>
 (function () {
   'use strict';
@@ -66,7 +66,7 @@
   const DEF = [['안녕?', '같이 놀자 :)'], ['같이 놀자'], ['같이 놀자', '너도 여기 남아']];
   const LV = ['너무', '조금', '안무서움'];
 
-  (window.HG_TOUR ? HG_TOUR.PLACES : [{ id: 'class1', name: '1학년 교실' }]).forEach((p) => {
+  (window.HG_TOUR ? Object.values(HG_TOUR.COURSES).flatMap((c) => c.places).filter((p, i, a) => a.findIndex((q) => q.id === p.id) === i) : [{ id: 'class1', name: '1학년 교실' }]).forEach((p) => {
     const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; $('station').appendChild(o);
   });
   $('station').value = conf.station || 'class1';
