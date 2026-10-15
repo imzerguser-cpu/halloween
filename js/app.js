@@ -311,7 +311,7 @@
       writeLS(LS_CACHE, cache);
       mergeOrder(j.groups || []);
       applySchoolName();
-      if (station()) setTimeout(() => prefetchSfx(), 1500);   // 연결되면 효과음을 차례로 받아 둔다 (이미 받은 것은 건너뜀)
+      if (station()) setTimeout(prefetchAll, 1500);   // 연결되면 효과음 → 나레이션·대사를 하나씩 차례로 모두 받아 둔다 (이미 받은 것은 건너뜀)
       if (!silent) setStatus('connStatus', `불러옴: 장소 ${j.stations.length}곳, 출발한 조 ${Object.keys(teams).length}개 (${new Date().toLocaleTimeString()})`, 'ok');
       return true;
     } catch (e) {
@@ -569,8 +569,16 @@
   }
   let ttsError = '', narrAudio = null, narrToken = 0;
   /** 이 장소에서 쓸 이야기(3단계, 출발 장소면 프롤로그도)를 미리 만들어 둔다 — 행사 중 와이파이가 끊겨도 재생 */
+  // 효과음 → (ElevenLabs 등을 쓰면) 이 장소 나레이션·대사를 하나씩 차례로. 동시에 두 번 돌지 않게
+  let prefetchAllRun = null;
+  function prefetchAll() {
+    return prefetchAllRun || (prefetchAllRun = (async () => {
+      try { await prefetchSfx(); if (ttsProvider() && station()) await prefetchNarration(); } catch (e) {}
+      prefetchAllRun = null;
+    })());
+  }
   async function prefetchNarration() {
-    prefetchSfx();
+    await prefetchSfx();
     if (!ttsProvider() || !station()) return;
     const s = station(), def = storyDef(s);
     for (let lv = 0; lv < 3; lv++) {
@@ -579,6 +587,7 @@
       if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
     }
     for (const f of [1, 2]) for (const line of VOICE_LINES[f]) await ttsClip(line, f).catch(() => {});
+    for (const line of SOFT_LINES) await ttsClip(line, 0).catch(() => {});   // 은은한 소리의 작은 목소리
   }
   const cleanSpeech = (t) => String(t || '').replace(/[「」📜😊]/g, '').trim();
   async function narrate(text, opts) {
