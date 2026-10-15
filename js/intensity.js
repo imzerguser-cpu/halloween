@@ -14,11 +14,12 @@
     '은은한소리_너무': '예', '은은한소리_조금': '예', '은은한소리_안무서움': '예',
     '큰소리_너무': '아니오', '큰소리_조금': '예', '큰소리_안무서움': '예',
     '깜짝얼굴_너무': '아니오', '깜짝얼굴_조금': '아니오', '깜짝얼굴_안무서움': '예',
+    '칠판글씨_너무': '예', '칠판글씨_조금': '예', '칠판글씨_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
-    '운영방식': '코스', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '연사'
+    '운영방식': '코스', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '연사', '칠판녹화': '예', '칠판장소': 'class1'
   };
   function get(st, k) {
     st = st || {};
@@ -47,6 +48,8 @@
     ghostCount: (st, fear) => Math.round(num(get(st, '귀신수_' + lv(fear)), 1, 0, 9)),
     softOn: (st, fear) => yes(get(st, '은은한소리_' + lv(fear))),
     loudOn: (st, fear) => yes(get(st, '큰소리_' + lv(fear))),
+    /** 전자칠판 분필 글씨 (1·2학년 조는 '너무' 단계 설정을 따른다) */
+    boardOn: (st, fear) => yes(get(st, '칠판글씨_' + lv(fear == null ? 0 : fear))),
     /** 화면 귀신 뒤 큰 얼굴 + 큰 소리 */
     jumpOn: (st, fear) => yes(get(st, '깜짝얼굴_' + lv(fear))),
     softVol: (st) => num(get(st, '효과음크기'), 0.6, 0, 1),
@@ -57,6 +60,8 @@
     tourOn: (st) => get(st, '운영방식') !== '미션',
     /** 빈 배경이 맞지 않으면(들고 찍은 사진) 어두운 곳에 귀신을 자유 배치 */
     freeGhost: (st) => yes(get(st, '자유배치')),
+    /** 칠판 글씨가 나오는 장소(칠판장소)에서 카메라를 켜면 학생 반응을 영상으로 */
+    boardRecAt: (st, id) => yes(get(st, '칠판녹화')) && String(get(st, '칠판장소') || '').split(/[,\s]+/).includes(id),
     /** 귀신이 나온 순간 학생 반응 찍기: 끔 · 연사(5장) · 영상 · 둘다 */
     reactMode: (st) => (['끔', '연사', '영상', '둘다'].includes(get(st, '놀람촬영')) ? get(st, '놀람촬영') : '연사'),
     /** 귀신 보이는 방법: 화면 · 사진 · 둘다 */
@@ -74,8 +79,8 @@
       const reveal = get(st, '공개방식');
       el.innerHTML = `
 <div class="int">
-  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th></tr>
-  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td></tr>`).join('')}
+  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th><th>칠판 글씨</th></tr>
+  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td><td>${chk('칠판글씨_' + l.key)}</td></tr>`).join('')}
   </table>
   <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 큰 소리가 납니다(이때는 따로 큰 소리를 내지 않음).</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
@@ -134,6 +139,10 @@
     ${[['끔', '안 찍기'], ['연사', '사진 5장 연사'], ['영상', '영상 (카운트다운 동안)'], ['둘다', '연사 + 영상']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-react" value="${v}"${api.reactMode(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
   <p class="int-help">화면에 귀신(깜짝 얼굴을 켠 조는 깜짝 얼굴)이 나온 순간 학생들 모습을 몰래 찍어 원본으로 저장합니다(파일 이름에 "놀람"). 학생 화면에는 보여 주지 않습니다. 영상은 소리도 담으려고 마이크 권한을 물을 수 있어요.</p>
+  <div class="int-row"><span>칠판 글씨 반응 녹화</span>
+    <label class="int-chk"><input type="checkbox" data-k="칠판녹화"${yes(get(st, '칠판녹화')) ? ' checked' : ''}> 전자칠판이 있는 장소에서 카메라를 켜면 14초 동안 학생 반응을 영상으로 몰래 녹화</label>
+    <label class="int-chk">칠판 장소 id <input type="text" data-k="칠판장소" value="${esc(get(st, '칠판장소'))}" style="width:120px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
+  </div>
   <div class="int-row"><span>귀신 넣는 방법</span>
     <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 어두운 곳에 귀신 그림을 자동으로 놓기 (화면 귀신은 늘 이 방식)</label>
   </div>
@@ -241,7 +250,7 @@
       // 무서움 단계 표(귀신 수·은은한 소리·큰 소리·깜짝 얼굴)만 기본값으로 채운다. 저장을 눌러야 적용
       el.querySelector('.int-reset').onclick = () => {
         LEVELS.forEach((l) => {
-          ['귀신수_', '은은한소리_', '큰소리_', '깜짝얼굴_'].forEach((p) => {
+          ['귀신수_', '은은한소리_', '큰소리_', '깜짝얼굴_', '칠판글씨_'].forEach((p) => {
             const k = p + l.key, f = el.querySelector(`[data-k="${k}"]`);
             if (!f) return;
             if (f.type === 'checkbox') f.checked = DEF[k] === '예'; else f.value = DEF[k];

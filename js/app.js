@@ -653,7 +653,7 @@
       .then((r) => r.json()).catch(() => ({ ok: false, error: 'net' }));
   }
   function startStudentCamera() {
-    sendCue('camera');
+    if (!window.Intensity || Intensity.boardOn(cache.settings, teamFear(cur.group))) sendCue('camera');   // 단계별 칠판 글씨 설정
     const t = stType();
     openCamera(t === '스태킹' || t === '탁구공' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
   }
@@ -683,7 +683,7 @@
       const video = mode === 'video'
         ? { facingMode: { ideal: camFacing() }, width: { ideal: 1280 }, height: { ideal: 720 } }
         : { facingMode: { ideal: camFacing() }, width: { ideal: 1920 }, height: { ideal: 1080 } };
-      const wantMic = mode === 'video' || (['student', 'burst'].includes(mode) && ['영상', '둘다'].includes(reactMode()) && wantGhostHere() && ghostOnScreen());
+      const wantMic = mode === 'video' || (['student', 'burst'].includes(mode) && ((['영상', '둘다'].includes(reactMode()) && wantGhostHere() && ghostOnScreen()) || boardRecHere()));
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: wantMic, video }); }
       catch (e) { if (!wantMic || mode === 'video') throw e; stream = await navigator.mediaDevices.getUserMedia({ audio: false, video }); }
       const v = $('camVideo'); v.srcObject = stream; await v.play();
@@ -695,8 +695,29 @@
     if (mode === 'scan') startScan();
     if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000, null, mode === 'student' && photoOnly());
     if (['student', 'burst', 'video', 'screentest'].includes(mode)) { prewarmScreenGhost(mode === 'screentest'); prefetchSfx(); }
+    if (['student', 'burst'].includes(mode) && boardRecHere()) startBoardRec();
   }
+  // ---------- 칠판 반응 녹화: 칠판 글씨가 나오는 장소에서 카메라를 켜면 14초(또는 카메라가 닫힐 때까지) 학생 반응을 녹화 ----------
+  let boardRec = null;
+  const boardRecHere = () => !!(window.Intensity && station() && Intensity.boardRecAt(cache.settings, station().id) && Intensity.boardOn(cache.settings, teamFear(cur.group)));   // 칠판 글씨가 나오는 조만
+  function startBoardRec() {
+    if (boardRec || !stream || typeof MediaRecorder === 'undefined') return;
+    const mime = pickVideoMime(); if (!mime) return;
+    let mr; try { mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 96000 }); } catch (e) { return; }
+    const r = boardRec = { mr, chunks: [], mime, group: cur.group, timer: null };
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) r.chunks.push(e.data); };
+    mr.onstop = async () => {
+      clearTimeout(r.timer); if (boardRec === r) boardRec = null;
+      if (!r.chunks.length) return;
+      const blob = new Blob(r.chunks, { type: r.mime.split(';')[0] });
+      await saveRecords([baseRecord({ group: r.group, kind: 'video', ext: /mp4/.test(r.mime) ? 'mp4' : 'webm', reaction: true, original: blob, reason: '칠판 반응' })]).catch(() => {});
+    };
+    mr.start(500);
+    r.timer = setTimeout(() => stopBoardRec(), 14000);
+  }
+  function stopBoardRec() { const r = boardRec; if (r && r.mr.state !== 'inactive') { try { r.mr.stop(); } catch (e) {} } }
   function closeCamera() {
+    stopBoardRec();
     stopScan();
     stopScreenGhost();
     clearTimeout(spookTimer); clearTimeout(loudTimer);
