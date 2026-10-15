@@ -55,6 +55,7 @@ h1,h2,h3{font-family:'Nanum Myeongjo','Batang',serif}
 .place-fig{margin:4px auto 6px;text-align:center}.place-fig img{display:block;margin:0 auto;max-height:30vh;max-width:100%;border-radius:14px;border:3px solid #ffe4ac;box-shadow:0 6px 20px #0008}.place-fig figcaption{font-weight:700;margin-top:6px;color:#ffe4ac;font-size:18px}
 .clue-body{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap}.clue-img{max-height:22vh;max-width:45%;border-radius:12px;border:2px solid #3a2408}
 #guideModal{position:fixed;inset:0;z-index:60;background:#000c;display:flex;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom))}#guideModal[hidden]{display:none}.guide-box{position:relative;width:min(1100px,100%);height:100%;border-radius:16px;overflow:hidden;background:#1d1233}.guide-box iframe{width:100%;height:100%;border:0}#btnGuideClose{position:absolute;right:12px;top:12px}
+.roster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-top:16px}.roster-grid button{border:2px solid #ffe4ac55;border-radius:14px;background:#2a1d4a;color:#fff1d9;padding:12px 8px;font:inherit;cursor:pointer}.roster-grid button b{display:block;font-size:26px}.roster-grid button small{display:block;font-size:14px;opacity:.85;margin-top:4px}.roster-grid button.done{opacity:.45}
 #btnAdminEnter{position:fixed;right:calc(14px + env(safe-area-inset-right));bottom:calc(64px + env(safe-area-inset-bottom));z-index:30;border:1px solid #ffffff59;background:#00000080;color:#ffffffd9;border-radius:999px;padding:9px 15px;font:600 14px/1 inherit;font-family:inherit;cursor:pointer}
 #camGhost{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
 #camGhost.mirror{transform:scaleX(-1)}
@@ -379,6 +380,10 @@ button{touch-action:manipulation}
 <section class="screen" id="scrTeam" hidden>
   <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div></header>
   <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="card" style="text-align:center" id="teamAskRoster" hidden>
+      <h2 class="big-title" style="font-size:30px">우리 조를 골라요</h2>
+      <div class="roster-grid" id="rosterGrid"></div>
+    </div>
     <div class="card" style="text-align:center" id="teamAskSize">
       <h2 class="big-title" style="font-size:30px">우리 조는 몇 명이에요?</h2>
       <div class="row center" style="margin-top:18px">
@@ -586,6 +591,14 @@ button{touch-action:manipulation}
 
     <div data-pane="tools" hidden>
       <div class="panel">
+        <h3>화면 귀신 미리보기</h3>
+        <p>학생이 찍을 때처럼 카메라를 켜고, 촬영 버튼을 누르면 5초 카운트다운 중 귀신이 화면에 1초쯤 비쳤다 사라집니다. 조 배정과 관계없이 무조건 나오고, 사진은 저장하지 않습니다.</p>
+        <button class="btn sm" id="btnScreenGhostTest">👀 화면 귀신 미리보기</button>
+        <button class="btn sm" id="btnCueTest">🧑‍🏫 칠판 신호 시험</button>
+        <button class="btn sm" id="btnJumpTest">😱 깜짝 얼굴까지 미리보기 (큰 소리 주의)</button>
+      </div>
+      <details class="panel"><summary style="cursor:pointer;font-weight:700">⚙ 예전 기능: 고정 태블릿 빈 배경 찍기 · 사진에 귀신 넣기 시험 (지금은 안 써도 돼요)</summary>
+      <div class="panel">
         <h3>빈 배경 촬영 (귀신 소재 만들기 1단계)</h3>
         <p>태블릿을 행사 때와 똑같이 고정한 뒤, 사람이 없는 상태로 찍으세요. 사진은 드라이브 "빈배경" 폴더(연결된 경우)와 이 기기 다운로드 폴더에 저장됩니다.
           그 사진을 이미지 생성 AI에 올려 귀신을 그려 넣은 뒤 ghost-maker.html 로 귀신 소재를 만듭니다.</p>
@@ -596,13 +609,7 @@ button{touch-action:manipulation}
         <p>이 장소의 귀신을 무조건 넣어서 한 장 찍어 봅니다. 사진함에 저장되지 않습니다.</p>
         <button class="btn sm" id="btnTestShot">👻 시험 촬영</button>
       </div>
-      <div class="panel">
-        <h3>화면 귀신 미리보기</h3>
-        <p>학생이 찍을 때처럼 카메라를 켜고, 촬영 버튼을 누르면 5초 카운트다운 중 귀신이 화면에 1초쯤 비쳤다 사라집니다. 조 배정과 관계없이 무조건 나오고, 사진은 저장하지 않습니다.</p>
-        <button class="btn sm" id="btnScreenGhostTest">👀 화면 귀신 미리보기</button>
-        <button class="btn sm" id="btnCueTest">🧑‍🏫 칠판 신호 시험</button>
-        <button class="btn sm" id="btnJumpTest">😱 깜짝 얼굴까지 미리보기 (큰 소리 주의)</button>
-      </div>
+      </details>
       <div class="panel">
         <h3>카메라 (이 태블릿)</h3>
         <p>빈 배경을 찍을 때와 행사 때 <b>같은 카메라·같은 조명</b>이어야 수정이 잘 됩니다.</p>
@@ -652,13 +659,13 @@ button{touch-action:manipulation}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
-<script src="js/ghost-engine.js?v=20261015232957" defer></script>
-<script src="js/ghost-free.js?v=20261015232957" defer></script>
-<script src="js/sfx.js?v=20261015232957" defer></script>
-<script src="js/intensity.js?v=20261015232957" defer></script>
-<script src="js/stories.js?v=20261015232957" defer></script>
-<script src="js/tour.js?v=20261015232957" defer></script>
-<script src="js/story-editor.js?v=20261015232957" defer></script>
-<script src="js/app.js?v=20261015232957" defer></script>
+<script src="js/ghost-engine.js?v=20261016000157" defer></script>
+<script src="js/ghost-free.js?v=20261016000157" defer></script>
+<script src="js/sfx.js?v=20261016000157" defer></script>
+<script src="js/intensity.js?v=20261016000157" defer></script>
+<script src="js/stories.js?v=20261016000157" defer></script>
+<script src="js/tour.js?v=20261016000157" defer></script>
+<script src="js/story-editor.js?v=20261016000157" defer></script>
+<script src="js/app.js?v=20261016000157" defer></script>
 </body>
 </html>

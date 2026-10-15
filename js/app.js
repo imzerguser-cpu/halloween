@@ -307,7 +307,7 @@
       const r = await fetch(url, { cache: 'no-store' });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error === 'key' ? '비밀 키가 맞지 않아요' : '시트 응답 오류');
-      cache = { raw: j.stations, stations: effStations(j.stations, j.settings), settings: j.settings, fetchedAt: j.fetchedAt };
+      cache = { raw: j.stations, stations: effStations(j.stations, j.settings), settings: j.settings, fetchedAt: j.fetchedAt, roster: j.teams || [] };
       writeLS(LS_CACHE, cache);
       mergeOrder(j.groups || []);
       applySchoolName();
@@ -454,7 +454,7 @@
     const grid = $('groupGrid'); grid.innerHTML = '';
     const v = visited();
     const known = Object.keys(teams).map(Number).sort((a, b) => a - b);
-    const nums = all || !known.length ? Array.from({ length: teamCount() }, (_, i) => i + 1) : known;
+    const nums = rosterTeams().length ? rosterTeams().map((t) => t.group) : all || !known.length ? Array.from({ length: teamCount() }, (_, i) => i + 1) : known;
     nums.forEach((g) => {
       const b = document.createElement('button');
       b.className = 'gbtn' + (v.has(teamTag(g)) ? ' done' : '');
@@ -474,10 +474,31 @@
 
   // 출발 장소: 인원 → (1·2학년?) → 조 번호 안내 → 미션
   let teamDraft = {};
+  const rosterTeams = () => (cache.roster || []).filter((t) => t && t.group);
+  const rosterOf = (g) => rosterTeams().find((t) => t.group === g) || null;
   function openTeamSetup(fixed) {
     teamDraft = { fixed: fixed || null };
-    $('teamAskSize').hidden = false; $('teamAskYoung').hidden = true; $('teamAskFear').hidden = true; $('teamDone').hidden = true;
+    $('teamAskRoster').hidden = true; $('teamAskSize').hidden = false; $('teamAskYoung').hidden = true; $('teamAskFear').hidden = true; $('teamDone').hidden = true;
+    const roster = rosterTeams();
+    if (roster.length) {                                                       // 명단이 있으면: 조를 고르면 인원·1·2학년이 정해진다
+      if (fixed && rosterOf(fixed)) { show('scrTeam'); return pickRosterTeam(rosterOf(fixed)); }
+      $('teamAskSize').hidden = true; $('teamAskRoster').hidden = false;
+      const grid = $('rosterGrid'); grid.innerHTML = '';
+      roster.forEach((t) => {
+        const b = document.createElement('button'); b.type = 'button';
+        b.className = teams[t.group] ? 'done' : '';
+        b.innerHTML = `<b>${t.group}조</b><small>${t.size}명${teams[t.group] ? ' · 출발함' : ''}</small>`;
+        b.onclick = () => pickRosterTeam(t);
+        grid.appendChild(b);
+      });
+    }
     show('scrTeam');
+  }
+  function pickRosterTeam(t) {
+    teamDraft = { fixed: t.group, size: t.size };
+    $('teamAskRoster').hidden = true; $('teamAskSize').hidden = true;
+    if (t.young) return finishTeam(true, null);                               // 1·2학년이 있는 조: 질문 없이 (귀신·소리 없음)
+    answerYoung(false);
   }
   function pickSize(n) {
     teamDraft.size = n;
@@ -492,7 +513,7 @@
     const g = newTeam(teamDraft.size, young, fear, teamDraft.fixed);
     $('teamAskFear').hidden = true;
     cur.group = g; markVisited(g);
-    $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamDone').hidden = false;
+    $('teamAskSize').hidden = true; $('teamAskYoung').hidden = true; $('teamAskRoster').hidden = true; $('teamDone').hidden = false;
     $('teamNum').textContent = g + '조';
     $('teamSizeText').textContent = `${teamDraft.size}명`;
     $('teamStory').hidden = true; $('btnTeamGo').hidden = true;
@@ -524,7 +545,7 @@
     })();
     a.timers.push(setTimeout(() => {
       if (a.done) return;
-      if (fear === 0) playSoft(sfxVol()); else playLoud(fear);              // 너무 무서워요 = 은은한 소리, 그 밖 = 큰 소리
+      if (loudOn()) playLoud(fear); else if (sfxOn()) playSoft(sfxVol());     // 표의 큰 소리 칸 → 큰 소리, 아니면 은은한 소리 칸 → 은은한 소리
       if (!a.stream || !a.video) return;
       const mime = pickVideoMime();
       if (mime) { try { a.rec = new MediaRecorder(a.stream, { mimeType: mime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 96000 }); a.mime = mime; a.rec.ondataavailable = (e) => { if (e.data && e.data.size) a.chunks.push(e.data); }; a.rec.start(500); } catch (e) { a.rec = null; } }

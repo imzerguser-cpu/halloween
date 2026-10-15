@@ -87,10 +87,30 @@
       const reveal = get(st, '공개방식');
       el.innerHTML = `
 <div class="int">
+  <h3 class="int-h">🗺 운영 방식과 장소</h3>
+  <div class="int-row"><span>운영 방식</span>
+    ${(() => { const m = window.HG_TOUR ? HG_TOUR.modeOf(st) : get(st, '운영방식'); const opts = (window.HG_TOUR ? Object.keys(HG_TOUR.COURSES).map((k) => [k, HG_TOUR.COURSES[k].label]) : []).concat([['미션', '장소별 미션 (예전 방식: 시트 "장소" 탭의 장소·미션, 영상 미션 포함)']]);
+      return opts.map(([v, t]) => `<label class="int-chk" style="display:flex"><input type="radio" name="int-mode" value="${v}"${m === v ? ' checked' : ''}> ${esc(t)}</label>`).join(''); })()}
+  </div>
+  <p class="int-help">운영 방식을 바꿔 저장하면 장소 목록이 바뀝니다. 태블릿마다 교사 모드에서 장소를 다시 골라 주세요. 마동 코스·인증샷 투어에서는 아래 촬영 방법과 관계없이 사진 인증샷(5초 카운트다운)으로 찍습니다. 미션 문구는 시트 설정 탭의 미션_장소id(예: 미션_class6), 도서관에서 찾을 책은 찾을책 에 적으면 바뀝니다.</p>
+  ${window.HG_TOUR && HG_TOUR.modeOf(st) === '코스' ? (() => {
+      const cur = HG_TOUR.coursePlaces(st, rawStations || []), curIds = cur.map((p) => p.id);
+      const rest = HG_TOUR.catalog(rawStations || []).filter((p) => !curIds.includes(p.id));
+      const row = (p, on) => `<li class="int-crow" data-cid="${esc(p.id)}"><label class="int-chk"><input type="checkbox" class="int-cuse"${on ? ' checked' : ''}> ${esc(p.name)} <small style="color:#8c91a3">(${esc(p.id)})</small></label><button type="button" class="int-cup">▲</button><button type="button" class="int-cdown">▼</button></li>`;
+      return `<div class="int-row"><span>마동 코스 장소</span><div style="flex:1;min-width:260px"><ol class="int-course">${cur.map((p) => row(p, true)).join('')}${rest.map((p) => row(p, false)).join('')}</ol>
+        <button type="button" class="int-cdefault">↩ 기본 코스(5곳)로</button></div></div>
+      <p class="int-help">체크한 장소를 위에서부터 순서대로 돕니다. ▲▼로 순서를 바꾸고, 체크를 켜면 추가·끄면 삭제돼요. 시트에 없는 장소도 넣을 수 있어요. 💾 저장 후 태블릿마다 장소를 다시 골라 주세요.</p>`;
+    })() : ''}
+  ${stations && stations.length && !(window.HG_TOUR && HG_TOUR.modeOf(st) === '코스') ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
+    ${stations.map((s) => `<label class="int-chk"><input type="checkbox" data-use="${esc(s.id)}"${api.offIds(st).includes(s.id) ? '' : ' checked'}> ${esc(s.name)}</label>`).join('')}
+  </div>
+  <p class="int-help">체크를 끈 장소는 귀신 배정과 진행판에서 빠집니다. 동선 안내(다음 장소 단서)는 시트 "장소" 탭의 단서 칸에서 고쳐 주세요.</p>` : ''}
+
+  <h3 class="int-h">🎚 무서움 단계별 효과와 소리</h3>
   <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th><th>칠판 글씨</th><th>도착 소리 (+반응 촬영)</th></tr>
   ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td><td>${chk('칠판글씨_' + l.key)}</td><td>${chk('도착소리_' + l.key)}</td></tr>`).join('')}
   </table>
-  <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 여자 비명이 납니다. 도착 소리: 장소에서 시작을 누르고 1~3초 뒤 소리 하나(너무 무서워요 = 은은한 소리, 그 밖 = 큰 소리)가 나고, 화면에 카메라를 띄우지 않고 반응을 연사 5장 + 영상 10초로 몰래 찍어요. 사진 인증샷 카운트다운 중에는 소리 없이 귀신만 나와요.</p>
+  <p class="int-help">1·2학년이 있는 조(명단 학년 또는 출발 질문)는 위 설정과 관계없이 귀신·소리가 없습니다.<br>• <b>도착 소리</b>: 장소에서 시작을 누르고 1~3초 뒤 소리 하나(큰 소리 칸이 켜져 있으면 큰 소리, 아니면 은은한 소리) + 반응 몰래 촬영(연사 5장·영상 10초).<br>• <b>귀신 나오는 장소</b>: 인증샷 카운트다운 중 화면에만 귀신이 1초쯤(소리 없음). <b>깜짝 얼굴</b>을 켠 단계는 귀신 뒤 큰 얼굴 + 여자 비명.<br>• <b>칠판 글씨</b>: 1학년 교실 전자칠판 분필 글씨.</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
   ${rng('큰소리크기', '큰 소리 크기', 'loud')}
   <div class="int-row int-sfx"><span>은은한 소리 하나씩 듣기</span>
@@ -101,18 +121,16 @@
   </div>
   <div class="int-sfxmsg" aria-live="polite"></div>
   <p class="int-help">처음 누를 때는 소리를 만드느라 몇 초 걸려요(한 번 만들면 저장돼서 바로 나와요). 음량은 위 크기 막대를 따라요.</p>
-  <div class="int-row"><span>찍은 뒤 학생에게 보여 주기</span>
-    ${[['즉시', '수정본 바로 보여 주기'], ['원본', '원본만 보여 주기'], ['숨김', '사진 안 보여 주기']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-reveal" data-k="공개방식" value="${v}"${reveal === v ? ' checked' : ''}> ${t}</label>`).join('')}
+  <h3 class="int-h">📷 반응 몰래 촬영</h3>
+  <div class="int-row"><span>놀라는 장면 찍기</span>
+    ${[['끔', '안 찍기'], ['연사', '사진 5장 연사'], ['영상', '영상 (카운트다운 동안)'], ['둘다', '연사 + 영상 (기본)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-react" value="${v}"${api.reactMode(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
-  <div class="int-row"><span>조 정하는 방법</span>
-    <label class="int-chk"><input type="radio" name="int-pick" data-k="조선정" value="자동"${get(st, '조선정') !== '선택' ? ' checked' : ''}> 자동 번호 (출발 장소에서 1조, 2조… / 다른 장소는 순서대로)</label>
-    <label class="int-chk"><input type="radio" name="int-pick" data-k="조선정" value="선택"${get(st, '조선정') === '선택' ? ' checked' : ''}> 조 번호 직접 고르기 (장소마다 번호 누르기)</label>
-    <label class="int-chk">조 수 <select data-k="조수">${Array.from({ length: 30 }, (_, i) => i + 1).map((n) => `<option value="${n}"${String(n) === get(st, '조수') ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+  <p class="int-help">화면에 귀신(깜짝 얼굴을 켠 조는 깜짝 얼굴)이 나온 순간 학생들 모습을 몰래 찍어 원본으로 저장합니다(파일 이름에 "놀람"). 학생 화면에는 보여 주지 않습니다. 영상은 소리도 담으려고 마이크 권한을 물을 수 있어요.</p>
+  <div class="int-row"><span>칠판 글씨 반응 녹화</span>
+    <label class="int-chk"><input type="checkbox" data-k="칠판녹화"${yes(get(st, '칠판녹화')) ? ' checked' : ''}> 전자칠판이 있는 장소에서 카메라를 켜면 14초 동안 학생 반응을 영상으로 몰래 녹화</label>
+    <label class="int-chk">칠판 장소 id <input type="text" data-k="칠판장소" value="${esc(get(st, '칠판장소'))}" style="width:120px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
   </div>
-  <div class="int-row"><span>출발할 때 묻기</span>
-    <label class="int-chk"><input type="checkbox" data-k="저학년질문"${yes(get(st, '저학년질문')) ? ' checked' : ''}> 1·2학년 동생 있나요?</label>
-    <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
-  </div>
+  <h3 class="int-h">🔊 이야기 나레이션</h3>
   <div class="int-row"><span>이야기 읽어 주기</span>
     <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>
   </div>
@@ -139,11 +157,20 @@
   </div>
   <p class="int-help">태블릿 음성(Web Speech)의 단계별 목소리는 교사 모드 <b>도구</b> 탭에서 태블릿마다 고릅니다. 남자 목소리는 태블릿에 남성 음성 데이터가 있어야 나옵니다.</p>
 
-  <div class="int-row"><span>운영 방식</span>
-    ${(() => { const m = window.HG_TOUR ? HG_TOUR.modeOf(st) : get(st, '운영방식'); const opts = (window.HG_TOUR ? Object.keys(HG_TOUR.COURSES).map((k) => [k, HG_TOUR.COURSES[k].label]) : []).concat([['미션', '장소별 미션 (예전 방식: 시트 "장소" 탭의 장소·미션, 영상 미션 포함)']]);
-      return opts.map(([v, t]) => `<label class="int-chk" style="display:flex"><input type="radio" name="int-mode" value="${v}"${m === v ? ' checked' : ''}> ${esc(t)}</label>`).join(''); })()}
+  <h3 class="int-h">🧭 출발할 때 묻기</h3>
+  <div class="int-row"><span>출발할 때 묻기</span>
+    <label class="int-chk"><input type="checkbox" data-k="저학년질문"${yes(get(st, '저학년질문')) ? ' checked' : ''}> 1·2학년 동생 있나요? (시트에 명단이 있으면 묻지 않고 학년으로 판단)</label>
+    <label class="int-chk"><input type="checkbox" data-k="무서움질문"${yes(get(st, '무서움질문')) ? ' checked' : ''}> 지금 얼마나 무서워요?</label>
   </div>
-  <p class="int-help">운영 방식을 바꿔 저장하면 장소 목록이 바뀝니다. 태블릿마다 교사 모드에서 장소를 다시 골라 주세요. 마동 코스·인증샷 투어에서는 아래 촬영 방법과 관계없이 사진 인증샷(5초 카운트다운)으로 찍습니다. 미션 문구는 시트 설정 탭의 미션_장소id(예: 미션_class6), 도서관에서 찾을 책은 찾을책 에 적으면 바뀝니다.</p>
+  <details class="int-adv"><summary>⚙ 고급 · 예전 방식 설정 (보통은 건드리지 않아도 돼요)</summary>
+  <div class="int-row"><span>조 정하는 방법</span>
+    <label class="int-chk"><input type="radio" name="int-pick" data-k="조선정" value="자동"${get(st, '조선정') !== '선택' ? ' checked' : ''}> 자동 번호 (출발 장소에서 1조, 2조… / 다른 장소는 순서대로)</label>
+    <label class="int-chk"><input type="radio" name="int-pick" data-k="조선정" value="선택"${get(st, '조선정') === '선택' ? ' checked' : ''}> 조 번호 직접 고르기 (장소마다 번호 누르기)</label>
+    <label class="int-chk">조 수 <select data-k="조수">${Array.from({ length: 30 }, (_, i) => i + 1).map((n) => `<option value="${n}"${String(n) === get(st, '조수') ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+  </div>
+  <div class="int-row"><span>찍은 뒤 학생에게 보여 주기</span>
+    ${[['즉시', '수정본 바로 보여 주기'], ['원본', '원본만 보여 주기'], ['숨김', '사진 안 보여 주기']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-reveal" data-k="공개방식" value="${v}"${reveal === v ? ' checked' : ''}> ${t}</label>`).join('')}
+  </div>
   <div class="int-row"><span>촬영 방법 (미션 방식)</span>
     <label class="int-chk"><input type="radio" name="int-shot" value="미션대로"${get(st, '촬영방식') !== '사진' ? ' checked' : ''}> 미션대로 (스태킹·탁구공은 영상, 동상은 연속사진)</label>
     <label class="int-chk"><input type="radio" name="int-shot" value="사진"${get(st, '촬영방식') === '사진' ? ' checked' : ''}> 모든 장소 사진 인증샷 (5초 카운트다운 뒤 찰칵)</label>
@@ -151,30 +178,11 @@
   <div class="int-row"><span>귀신 보이는 방법</span>
     ${[['화면', '카메라 화면에만 1초쯤 (찍힌 사진은 그대로)'], ['사진', '찍힌 사진에만 (수정본)'], ['둘다', '화면에도, 사진에도']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-gview" value="${v}"${api.ghostView(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
-  <div class="int-row"><span>놀라는 장면 찍기</span>
-    ${[['끔', '안 찍기'], ['연사', '사진 5장 연사'], ['영상', '영상 (카운트다운 동안)'], ['둘다', '연사 + 영상 (기본)']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-react" value="${v}"${api.reactMode(st) === v ? ' checked' : ''}> ${t}</label>`).join('')}
-  </div>
-  <p class="int-help">화면에 귀신(깜짝 얼굴을 켠 조는 깜짝 얼굴)이 나온 순간 학생들 모습을 몰래 찍어 원본으로 저장합니다(파일 이름에 "놀람"). 학생 화면에는 보여 주지 않습니다. 영상은 소리도 담으려고 마이크 권한을 물을 수 있어요.</p>
-  <div class="int-row"><span>칠판 글씨 반응 녹화</span>
-    <label class="int-chk"><input type="checkbox" data-k="칠판녹화"${yes(get(st, '칠판녹화')) ? ' checked' : ''}> 전자칠판이 있는 장소에서 카메라를 켜면 14초 동안 학생 반응을 영상으로 몰래 녹화</label>
-    <label class="int-chk">칠판 장소 id <input type="text" data-k="칠판장소" value="${esc(get(st, '칠판장소'))}" style="width:120px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
-  </div>
   <div class="int-row"><span>귀신 넣는 방법</span>
     <label class="int-chk"><input type="checkbox" data-k="자유배치"${yes(get(st, '자유배치')) ? ' checked' : ''}> 빈 배경이 없거나 맞지 않으면 어두운 곳에 귀신 그림을 자동으로 놓기 (화면 귀신은 늘 이 방식)</label>
   </div>
-  ${window.HG_TOUR && HG_TOUR.modeOf(st) === '코스' ? (() => {
-      const cur = HG_TOUR.coursePlaces(st, rawStations || []), curIds = cur.map((p) => p.id);
-      const rest = HG_TOUR.catalog(rawStations || []).filter((p) => !curIds.includes(p.id));
-      const row = (p, on) => `<li class="int-crow" data-cid="${esc(p.id)}"><label class="int-chk"><input type="checkbox" class="int-cuse"${on ? ' checked' : ''}> ${esc(p.name)} <small style="color:#8c91a3">(${esc(p.id)})</small></label><button type="button" class="int-cup">▲</button><button type="button" class="int-cdown">▼</button></li>`;
-      return `<div class="int-row"><span>마동 코스 장소</span><div style="flex:1;min-width:260px"><ol class="int-course">${cur.map((p) => row(p, true)).join('')}${rest.map((p) => row(p, false)).join('')}</ol>
-        <button type="button" class="int-cdefault">↩ 기본 코스(5곳)로</button></div></div>
-      <p class="int-help">체크한 장소를 위에서부터 순서대로 돕니다. ▲▼로 순서를 바꾸고, 체크를 켜면 추가·끄면 삭제돼요. 시트에 없는 장소도 넣을 수 있어요. 💾 저장 후 태블릿마다 장소를 다시 골라 주세요.</p>`;
-    })() : ''}
-  ${stations && stations.length && !(window.HG_TOUR && HG_TOUR.modeOf(st) === '코스') ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
-    ${stations.map((s) => `<label class="int-chk"><input type="checkbox" data-use="${esc(s.id)}"${api.offIds(st).includes(s.id) ? '' : ' checked'}> ${esc(s.name)}</label>`).join('')}
-  </div>
-  <p class="int-help">체크를 끈 장소는 귀신 배정과 진행판에서 빠집니다. 동선 안내(다음 장소 단서)는 시트 "장소" 탭의 단서 칸에서 고쳐 주세요.</p>` : ''}
-
+  </details>
+  <h3 class="int-h">🏫 기본</h3>
   <div class="int-row int-pin"><span>학교 이름 (첫 화면 푯말)</span>
     <input type="text" data-k="학교이름" maxlength="20" value="${esc(get(st, '학교이름'))}" placeholder="예: 마동초등학교">
   </div>
@@ -307,6 +315,7 @@
 .int-help{font-size:13px;color:#a9aec0;margin:6px 0 12px}.int-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.int-row>span:first-child{font-size:14px;color:#a9aec0;min-width:150px}
 .int-course{margin:0;padding-left:22px}.int-course li{display:flex;align-items:center;gap:6px;margin:4px 0}.int-course li button{padding:3px 9px;font-size:12px;background:#252935;color:#e8eaf0}
 .int-sfx button{padding:6px 10px;font-size:13px}.int-sfxmsg{min-height:20px;font-size:14px;margin:4px 0 0;font-weight:700}
+.int-h{margin:22px 0 6px;font-size:17px;color:#ffcf7a;border-top:1px solid #2e3240;padding-top:14px}.int-h:first-child{border-top:0;margin-top:0;padding-top:0}.int-adv{margin:16px 0;border:1px dashed #3a3f50;border-radius:10px;padding:8px 12px}.int-adv summary{cursor:pointer;color:#a9aec0;font-weight:700}
 .int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}
