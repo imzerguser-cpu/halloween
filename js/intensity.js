@@ -45,7 +45,7 @@
 
   // 소리 목록: [이름, 화면 표시]. line: 으로 시작하면 목소리 대사
   const SOFT_LIST = [['steps2', '발자국'], ['rustle2', '옷깃 스치는 소리'], ['drag2', '발 끄는 소리'], ['desk2', '책상 끌리는 소리'], ['door2', '문 열리는 소리'], ['wind2', '바람 소리'], ['murmur2', '소곤소곤 속삭임'],
-    ['owl', '부엉이 울음'], ['crickets', '귀뚜라미 소리'], ['rain', '창문 빗소리'], ['thunder', '먼 천둥'], ['crow', '까마귀 울음']];
+    ['owl', '부엉이 울음'], ['crickets', '귀뚜라미 소리'], ['knockWin', '창문 두드리는 소리'], ['thunder', '먼 천둥'], ['crow', '까마귀 울음']];
   const LOUD_LIST = [['laughW', '여자 웃음소리'], ['laughM', '아저씨 웃음소리'], ['laughBoy', '남자아이 웃음소리'], ['babyCry', '아기 울음소리'], ['catCry', '고양이 울음소리'], ['girlCry', '여자아이 울음소리'],
     ['scream', '여자 비명'], ['scream2', '여자아이 비명'], ['laugh', '여자아이 킥킥 웃음']];
   const api = {
@@ -210,7 +210,7 @@
             window.HG_loudPreview(v).then((n) => { if (n) smsg('🔊 ' + ({ laughW: '여자 웃음소리', laughM: '아저씨 웃음소리', babyCry: '아기 울음소리', catCry: '고양이 울음소리', girlCry: '여자아이 울음소리', laughBoy: '남자아이 웃음소리' }[n] || n)); else { Sfx.loud(null, v); smsg('실제 소리를 아직 못 받아서 합성 소리로 들려줘요 (시트 스크립트 새 버전 배포 확인)', false); } });
           } else if (b.dataset.play !== 'loud' && window.HG_softPreview) {
             smsg('은은한 소리를 준비하는 중...');
-            window.HG_softPreview(v).then((n) => smsg('🔊 ' + ({ steps2: '발자국', rustle2: '옷깃 스치는 소리', drag2: '발 끄는 소리', desk2: '책상 끌리는 소리', door2: '문 열리는 소리', wind2: '바람 소리', murmur2: '소곤소곤 속삭임', owl: '부엉이 울음', crickets: '귀뚜라미 소리', rain: '창문 빗소리', thunder: '먼 천둥', crow: '까마귀 울음' }[n] || '합성 소리')));
+            window.HG_softPreview(v).then((n) => smsg('🔊 ' + ({ steps2: '발자국', rustle2: '옷깃 스치는 소리', drag2: '발 끄는 소리', desk2: '책상 끌리는 소리', door2: '문 열리는 소리', wind2: '바람 소리', murmur2: '소곤소곤 속삭임', owl: '부엉이 울음', crickets: '귀뚜라미 소리', knockWin: '창문 두드리는 소리', thunder: '먼 천둥', crow: '까마귀 울음' }[n] || '합성 소리')));
           } else b.dataset.play === 'loud' ? Sfx.loud(null, v) : Sfx.play(null, v);
         };
       });
