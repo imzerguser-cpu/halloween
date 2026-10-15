@@ -15,6 +15,7 @@
     '큰소리_너무': '아니오', '큰소리_조금': '예', '큰소리_안무서움': '예',
     '깜짝얼굴_너무': '아니오', '깜짝얼굴_조금': '아니오', '깜짝얼굴_안무서움': '예',
     '칠판글씨_너무': '예', '칠판글씨_조금': '예', '칠판글씨_안무서움': '예',
+    '도착소리_너무': '예', '도착소리_조금': '예', '도착소리_안무서움': '예',
     '효과음크기': '0.6', '큰소리크기': '1',
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
@@ -53,6 +54,8 @@
     ghostCount: (st, fear) => Math.round(num(get(st, '귀신수_' + lv(fear)), 1, 0, 9)),
     softOn: (st, fear) => yes(get(st, '은은한소리_' + lv(fear))),
     loudOn: (st, fear) => yes(get(st, '큰소리_' + lv(fear))),
+    /** 장소에 도착해 시작을 누르면 1~3초 뒤 소리 + 반응 몰래 촬영 (1·2학년 조는 없음) */
+    arrivalOn: (st, fear) => fear != null && yes(get(st, '도착소리_' + lv(fear))),
     /** 전자칠판 분필 글씨 (1·2학년 조는 '너무' 단계 설정을 따른다) */
     boardOn: (st, fear) => yes(get(st, '칠판글씨_' + lv(fear == null ? 0 : fear))),
     /** 화면 귀신 뒤 큰 얼굴 + 큰 소리 */
@@ -84,10 +87,10 @@
       const reveal = get(st, '공개방식');
       el.innerHTML = `
 <div class="int">
-  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th><th>칠판 글씨</th></tr>
-  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td><td>${chk('칠판글씨_' + l.key)}</td></tr>`).join('')}
+  <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th><th>칠판 글씨</th><th>도착 소리 (+반응 촬영)</th></tr>
+  ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td><td>${chk('칠판글씨_' + l.key)}</td><td>${chk('도착소리_' + l.key)}</td></tr>`).join('')}
   </table>
-  <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 큰 소리가 납니다(이때는 따로 큰 소리를 내지 않음).</p>
+  <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 여자 비명이 납니다. 도착 소리: 장소에서 시작을 누르고 1~3초 뒤 소리 하나(너무 무서워요 = 은은한 소리, 그 밖 = 큰 소리)가 나고, 화면에 카메라를 띄우지 않고 반응을 연사 5장 + 영상 10초로 몰래 찍어요. 사진 인증샷 카운트다운 중에는 소리 없이 귀신만 나와요.</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
   ${rng('큰소리크기', '큰 소리 크기', 'loud')}
   <div class="int-row int-sfx"><span>은은한 소리 하나씩 듣기</span>
@@ -279,7 +282,7 @@
       // 무서움 단계 표(귀신 수·은은한 소리·큰 소리·깜짝 얼굴)만 기본값으로 채운다. 저장을 눌러야 적용
       el.querySelector('.int-reset').onclick = () => {
         LEVELS.forEach((l) => {
-          ['귀신수_', '은은한소리_', '큰소리_', '깜짝얼굴_', '칠판글씨_'].forEach((p) => {
+          ['귀신수_', '은은한소리_', '큰소리_', '깜짝얼굴_', '칠판글씨_', '도착소리_'].forEach((p) => {
             const k = p + l.key, f = el.querySelector(`[data-k="${k}"]`);
             if (!f) return;
             if (f.type === 'checkbox') f.checked = DEF[k] === '예'; else f.value = DEF[k];

@@ -505,12 +505,59 @@
 
   // ---------- 이야기 화면 (전체 화면 + 나레이션) ----------
   let storyPages = [], storyIdx = 0;
+  // ---------- 도착 반응: 시작을 누르고 1~3초 뒤 소리 하나 → 카메라 화면 없이 연사 5장 + 영상 10초 ----------
+  let arrival = null, narrTimer = null;
+  const arrivalOn = () => !!(window.Intensity && Intensity.arrivalOn(cache.settings, teamFear(cur.group)));
+  function startArrival() {
+    stopArrival();
+    if (!arrivalOn() || !navigator.mediaDevices) return 0;
+    const delay = 1000 + Math.random() * 2000, fear = teamFear(cur.group), group = cur.group;
+    const a = arrival = { stream: null, video: null, rec: null, chunks: [], frames: [], timers: [], mime: '', group, done: false };
+    (async () => {
+      try {
+        const video = { facingMode: { ideal: camFacing() }, width: { ideal: 1280 }, height: { ideal: 720 } };
+        try { a.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video }); }
+        catch (e) { a.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video }); }
+        if (a.done) return a.stream.getTracks().forEach((t) => t.stop());
+        const v = a.video = document.createElement('video'); v.muted = true; v.playsInline = true; v.srcObject = a.stream; await v.play().catch(() => {});
+      } catch (e) { a.stream = null; }
+    })();
+    a.timers.push(setTimeout(() => {
+      if (a.done) return;
+      if (fear === 0) playSoft(sfxVol()); else playLoud(fear);              // 너무 무서워요 = 은은한 소리, 그 밖 = 큰 소리
+      if (!a.stream || !a.video) return;
+      const mime = pickVideoMime();
+      if (mime) { try { a.rec = new MediaRecorder(a.stream, { mimeType: mime, videoBitsPerSecond: 2000000, audioBitsPerSecond: 96000 }); a.mime = mime; a.rec.ondataavailable = (e) => { if (e.data && e.data.size) a.chunks.push(e.data); }; a.rec.start(500); } catch (e) { a.rec = null; } }
+      for (let i = 0; i < 5; i++) a.timers.push(setTimeout(() => {           // 놀라는 데 0.2~0.3초: 0.25초 뒤부터 0.2초 간격
+        const vv = a.video; if (a.done || !vv || !vv.videoWidth) return;
+        const c = document.createElement('canvas'); c.width = vv.videoWidth; c.height = vv.videoHeight; c.getContext('2d').drawImage(vv, 0, 0); a.frames.push(c);
+      }, 250 + i * 200));
+      a.timers.push(setTimeout(() => stopArrival(), 10000));                 // 영상 10초
+    }, delay));
+    return delay + 2500;                                                     // 나레이션은 소리 뒤에
+  }
+  function stopArrival() {
+    const a = arrival; if (!a || a.done) return;
+    a.done = true; arrival = null; a.timers.forEach(clearTimeout);
+    const finish = async () => {
+      if (a.stream) a.stream.getTracks().forEach((t) => t.stop());
+      const recs = [], takenAt = Date.now();
+      const saveGroup = cur.group; cur.group = a.group;                         // baseRecord 는 지금 조를 쓰므로 잠깐 맞춘다
+      try {
+        for (let i = 0; i < a.frames.length; i++) recs.push(baseRecord({ takenAt, seq: i + 1, reaction: true, original: await canvasToBlob(a.frames[i]), reason: '도착 반응' }));
+        if (a.chunks.length) recs.push(baseRecord({ takenAt, kind: 'video', ext: /mp4/.test(a.mime) ? 'mp4' : 'webm', reaction: true, original: new Blob(a.chunks, { type: a.mime.split(';')[0] }), reason: '도착 반응' }));
+      } finally { cur.group = saveGroup; }
+      if (recs.length) await saveRecords(recs).catch(() => {});
+    };
+    if (a.rec && a.rec.state !== 'inactive') { a.rec.onstop = finish; try { a.rec.stop(); } catch (e) { finish(); } } else finish();
+  }
   function openStories(pages) {
     storyPages = pages.filter(Boolean);
+    const wait = startArrival();
     if (!storyPages.length) return openMission();
-    storyIdx = 0; showStoryPage();
+    storyIdx = 0; showStoryPage(wait);
   }
-  function showStoryPage() {
+  function showStoryPage(narrDelay) {
     const pg = storyPages[storyIdx];
     $('storyGroup').textContent = cur.group + '조';
     $('storyTitle').textContent = pg.title ? (pg.title === '오늘 밤의 이야기' ? '📜 ' + pg.title : '「' + pg.title + '」') : '';
@@ -518,7 +565,9 @@
     $('btnStoryNext').textContent = storyIdx < storyPages.length - 1 ? '다음 이야기 ▶' : isMissionPlace(station()) ? '미션 보기 ▶' : '인증샷 찍으러 가기 ▶';
     const box = $('storyText'); box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
     show('scrStory');
-    narrate(pg.text);
+    clearTimeout(narrTimer);
+    if (narrDelay) { stopNarration(); narrTimer = setTimeout(() => { if (!$('scrStory').hidden) narrate(pg.text); }, narrDelay); }   // 도착 소리 뒤에 나레이션
+    else narrate(pg.text);
   }
   function nextStory() {
     stopNarration();
@@ -734,6 +783,7 @@
   // 이 태블릿의 카메라: 앞면(user, 기본) / 뒷면(environment). 앞면은 미리보기만 거울처럼 보여 주고 저장은 정상 방향
   const camFacing = () => (conf.facing === 'environment' ? 'environment' : 'user');
   async function openCamera(mode) {
+    stopArrival(); clearTimeout(narrTimer);
     camMode = mode;
     $('camVideo').classList.toggle('mirror', camFacing() === 'user');
     $('scrCamera').classList.toggle('lit', camFacing() === 'user' && !!conf.screenLight);
@@ -764,7 +814,7 @@
       return backFromCamera();
     }
     if (mode === 'scan') startScan();
-    if (['student', 'burst', 'scan'].includes(mode)) scheduleSpook(3000, 6000, null, mode === 'student' && photoOnly());
+    if (['student', 'burst', 'scan'].includes(mode) && !(mode === 'student' && photoOnly())) scheduleSpook(3000, 6000);   // 사진 인증샷은 도착 소리로 대신
     if (['student', 'burst', 'video', 'screentest'].includes(mode)) { prewarmScreenGhost(mode === 'screentest'); prefetchSfx(); }
     if (['student', 'burst'].includes(mode) && boardRecHere()) startBoardRec();
   }
@@ -864,7 +914,7 @@
     const x = c.getContext('2d'), base = Math.min(0.88, Math.max(0.66, p.alpha + 0.3)), t0 = performance.now(), fin = 250, fout = 350;
     const glitch = () => { v.classList.add('glitch'); setTimeout(() => v.classList.remove('glitch'), 140); };
     glitch();
-    if (sfxOn()) playSoft(sfxVol());
+    if (sfxOn() && !photoOnly()) playSoft(sfxVol());                         // 사진 인증샷에서는 귀신만 (소리는 도착 때)
     const frame = (now) => {
       const t = now - t0, total = fin + hold + fout;
       x.clearRect(0, 0, c.width, c.height);
@@ -957,7 +1007,7 @@
     let shown = false;
     screenGhostWhy = want ? '' : '귀신 없는 조·장소';
     const react = want ? startReaction(!!force) : null;
-    const loudHere = !force && !jump && n >= 4 && loudOn();                   // 2단계: 큰 소리
+    const loudHere = !force && !jump && n >= 4 && loudOn() && !photoOnly();   // 사진 인증샷에서는 큰 소리를 도착 때로
     let loudDone = false;
     const fireLoud = () => { if (loudHere && !loudDone && stream) { loudDone = true; playLoud(teamFear(cur.group)); } };
     if (loudHere) { clearTimeout(loudTimer); loudTimer = setTimeout(fireLoud, want ? Math.max(2500, n * 1000 - 1800) : 2000); }   // 귀신이 안 나오면 이때
