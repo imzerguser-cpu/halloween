@@ -311,6 +311,7 @@
       writeLS(LS_CACHE, cache);
       mergeOrder(j.groups || []);
       applySchoolName();
+      if (station()) setTimeout(() => prefetchSfx(), 1500);   // 연결되면 효과음을 차례로 받아 둔다 (이미 받은 것은 건너뜀)
       if (!silent) setStatus('connStatus', `불러옴: 장소 ${j.stations.length}곳, 출발한 조 ${Object.keys(teams).length}개 (${new Date().toLocaleTimeString()})`, 'ok');
       return true;
     } catch (e) {
