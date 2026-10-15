@@ -96,6 +96,7 @@
   <div class="int-row int-sfx"><span>큰 소리 하나씩 듣기</span>
     ${api.LOUD_LIST.map(([n, t]) => `<button type="button" class="int-play" data-sfx="${n}" data-kind="loud">▶ ${t}</button>`).join('')}
   </div>
+  <div class="int-sfxmsg" aria-live="polite"></div>
   <p class="int-help">처음 누를 때는 소리를 만드느라 몇 초 걸려요(한 번 만들면 저장돼서 바로 나와요). 음량은 위 크기 막대를 따라요.</p>
   <div class="int-row"><span>찍은 뒤 학생에게 보여 주기</span>
     ${[['즉시', '수정본 바로 보여 주기'], ['원본', '원본만 보여 주기'], ['숨김', '사진 안 보여 주기']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-reveal" data-k="공개방식" value="${v}"${reveal === v ? ' checked' : ''}> ${t}</label>`).join('')}
@@ -188,27 +189,28 @@
 </div>`;
       const msg = (t, ok) => { const m = el.querySelector('.int-msg'); m.textContent = t; m.style.color = ok === false ? '#ff9aa8' : ok ? '#9ce6b4' : ''; };
       el.querySelectorAll('input[type=range]').forEach((r) => { r.oninput = () => { el.querySelector(`[data-v="${r.dataset.k}"]`).textContent = Math.round(r.value * 100) + '%'; }; });
+      const smsg = (t, ok) => { const m = el.querySelector('.int-sfxmsg'); m.textContent = t; m.style.color = ok === false ? '#ff9aa8' : ok ? '#9ce6b4' : ''; };
       el.querySelectorAll('[data-sfx]').forEach((b) => {
         b.onclick = async () => {
-          if (!onSfx) return msg('이 화면에서는 들을 수 없어요', false);
+          if (!onSfx) return smsg('이 화면에서는 들을 수 없어요', false);
           const vol = parseFloat(el.querySelector(`input[data-k="${b.dataset.kind === 'loud' ? '큰소리크기' : '효과음크기'}"]`).value);
-          msg('🔊 ' + b.textContent.replace('▶ ', '') + ' 준비 중...');
-          try { const r = await onSfx(b.dataset.sfx, vol, b.dataset.kind); msg(r && r.error ? r.error : '🔊 ' + b.textContent.replace('▶ ', ''), !(r && r.error)); }
-          catch (e) { msg('듣기 실패: ' + e.message, false); }
+          smsg('🔊 ' + b.textContent.replace('▶ ', '') + ' 준비 중...');
+          try { const r = await onSfx(b.dataset.sfx, vol, b.dataset.kind); smsg(r && r.error ? r.error : '🔊 ' + b.textContent.replace('▶ ', ''), !(r && r.error)); }
+          catch (e) { smsg('듣기 실패: ' + e.message, false); }
         };
       });
       el.querySelectorAll('[data-play]').forEach((b) => {
         b.onclick = () => {
-          if (!window.Sfx) return msg('소리 기능을 불러오지 못했어요', false);
+          if (!window.Sfx) return smsg('소리 기능을 불러오지 못했어요', false);
           Sfx.unlock();
           const k = b.dataset.play === 'loud' ? '큰소리크기' : '효과음크기';
           const v = parseFloat(el.querySelector(`input[data-k="${k}"]`).value);
           if (b.dataset.play === 'loud' && window.HG_loudPreview) {
-            msg('큰 소리를 준비하는 중...');
-            window.HG_loudPreview(v).then((n) => { if (n) msg('🔊 ' + ({ laughW: '여자 웃음소리', laughM: '아저씨 웃음소리', babyCry: '아기 울음소리', catCry: '고양이 울음소리', girlCry: '여자아이 울음소리', laughBoy: '남자아이 웃음소리' }[n] || n)); else { Sfx.loud(null, v); msg('실제 소리를 아직 못 받아서 합성 소리로 들려줘요 (시트 스크립트 새 버전 배포 확인)', false); } });
+            smsg('큰 소리를 준비하는 중...');
+            window.HG_loudPreview(v).then((n) => { if (n) smsg('🔊 ' + ({ laughW: '여자 웃음소리', laughM: '아저씨 웃음소리', babyCry: '아기 울음소리', catCry: '고양이 울음소리', girlCry: '여자아이 울음소리', laughBoy: '남자아이 웃음소리' }[n] || n)); else { Sfx.loud(null, v); smsg('실제 소리를 아직 못 받아서 합성 소리로 들려줘요 (시트 스크립트 새 버전 배포 확인)', false); } });
           } else if (b.dataset.play !== 'loud' && window.HG_softPreview) {
-            msg('은은한 소리를 준비하는 중...');
-            window.HG_softPreview(v).then((n) => msg('🔊 ' + ({ steps2: '발자국', rustle2: '옷깃 스치는 소리', drag2: '발 끄는 소리', desk2: '책상 끌리는 소리', door2: '문 열리는 소리', wind2: '바람 소리', murmur2: '소곤소곤 속삭임', owl: '부엉이 울음', crickets: '귀뚜라미 소리', rain: '창문 빗소리', thunder: '먼 천둥', crow: '까마귀 울음' }[n] || '합성 소리')));
+            smsg('은은한 소리를 준비하는 중...');
+            window.HG_softPreview(v).then((n) => smsg('🔊 ' + ({ steps2: '발자국', rustle2: '옷깃 스치는 소리', drag2: '발 끄는 소리', desk2: '책상 끌리는 소리', door2: '문 열리는 소리', wind2: '바람 소리', murmur2: '소곤소곤 속삭임', owl: '부엉이 울음', crickets: '귀뚜라미 소리', rain: '창문 빗소리', thunder: '먼 천둥', crow: '까마귀 울음' }[n] || '합성 소리')));
           } else b.dataset.play === 'loud' ? Sfx.loud(null, v) : Sfx.play(null, v);
         };
       });
@@ -301,7 +303,7 @@
 .int-chk{display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:14px;color:#e8eaf0;cursor:pointer}.int-chk input{width:auto}
 .int-help{font-size:13px;color:#a9aec0;margin:6px 0 12px}.int-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.int-row>span:first-child{font-size:14px;color:#a9aec0;min-width:150px}
 .int-course{margin:0;padding-left:22px}.int-course li{display:flex;align-items:center;gap:6px;margin:4px 0}.int-course li button{padding:3px 9px;font-size:12px;background:#252935;color:#e8eaf0}
-.int-sfx button{padding:6px 10px;font-size:13px}
+.int-sfx button{padding:6px 10px;font-size:13px}.int-sfxmsg{min-height:20px;font-size:14px;margin:4px 0 0;font-weight:700}
 .int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}

@@ -195,16 +195,24 @@
     let blob = await ttsDb.get(k).catch(() => null);
     if (!blob && conf.apiUrl && conf.apiKey && navigator.onLine) {
       try {
-        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, action: 'sfx', name, prompt: SFX_PROMPTS[name] || '' }) });
-        const j = await r.json();
-        if (!j.ok) sfxErr = j.error === 'key' ? '비밀 키가 맞지 않아요' : j.error === 'name' || j.error === 'action' ? '시트 스크립트가 예전 버전이에요(Code.gs 붙여 넣고 새 버전 배포)' : String(j.error || '') + (j.detail ? ' ' + String(j.detail).slice(0, 120) : '');
+        // 시트 스크립트가 잠깐 오류(시간 초과 등)를 내면 3초 뒤 한 번 더
+        let j = null;
+        for (let attempt = 0; attempt < 2 && !j; attempt++) {
+          if (attempt) await new Promise((res) => setTimeout(res, 3000));
+          const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, action: 'sfx', name, prompt: SFX_PROMPTS[name] || '' }) });
+          const txt = await r.text();
+          try { j = JSON.parse(txt); } catch (e) { sfxErr = '시트 스크립트가 잠깐 오류를 냈어요. 잠시 뒤 다시 눌러 보세요.'; }
+          if (j && !j.ok && j.error === 'server') { sfxErr = '시트 스크립트 오류: ' + (j.detail || ''); j = attempt ? j : null; }
+        }
+        if (!j) throw new Error(sfxErr);
+        if (!j.ok && j.error !== 'server') sfxErr = j.error === 'key' ? '비밀 키가 맞지 않아요' : j.error === 'name' || j.error === 'action' ? '시트 스크립트가 예전 버전이에요(Code.gs 붙여 넣고 새 버전 배포)' : String(j.error || '') + (j.detail ? ' ' + String(j.detail).slice(0, 120) : '');
         if (j.ok && j.data) {
           const bin = atob(j.data), u8 = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
           blob = new Blob([u8], { type: j.mime || 'audio/mpeg' });
           await ttsDb.put(k, blob).catch(() => {});
         }
-      } catch (e) { sfxErr = '인터넷 또는 시트 연결 오류: ' + e.message; }
+      } catch (e) { if (!/시트 스크립트/.test(e.message)) sfxErr = '인터넷 또는 시트 연결 오류: ' + e.message; }
     } else if (!blob) sfxErr = !conf.apiKey ? '연결 탭에 비밀 키가 없어요' : '인터넷 연결이 없어요';
     if (blob) sfxClips[name] = blob;
     return blob || null;
