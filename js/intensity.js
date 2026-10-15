@@ -182,7 +182,13 @@
           Sfx.unlock();
           const k = b.dataset.play === 'loud' ? '큰소리크기' : '효과음크기';
           const v = parseFloat(el.querySelector(`input[data-k="${k}"]`).value);
-          b.dataset.play === 'loud' ? Sfx.loud(null, v) : Sfx.play(null, v);
+          if (b.dataset.play === 'loud' && window.HG_loudPreview) {
+            msg('큰 소리를 준비하는 중...');
+            window.HG_loudPreview(v).then((n) => { if (n) msg('🔊 ' + ({ laughW: '여자 웃음소리', laughM: '아저씨 웃음소리', babyCry: '아기 울음소리', catCry: '고양이 울음소리', girlCry: '여자아이 울음소리' }[n] || n)); else { Sfx.loud(null, v); msg('실제 소리를 아직 못 받아서 합성 소리로 들려줘요 (시트 스크립트 새 버전 배포 확인)', false); } });
+          } else if (b.dataset.play !== 'loud' && window.HG_softPreview) {
+            msg('은은한 소리를 준비하는 중...');
+            window.HG_softPreview(v).then((n) => msg('🔊 ' + ({ steps: '발자국', rustle: '옷깃 스치는 소리', drag: '발 끄는 소리', desk: '책상 끌리는 소리', door: '문 열리는 소리', wind: '바람 소리', murmur: '소곤소곤 속삭임', voice: '작은 목소리' }[n] || '합성 소리')));
+          } else b.dataset.play === 'loud' ? Sfx.loud(null, v) : Sfx.play(null, v);
         };
       });
       const collect = () => {

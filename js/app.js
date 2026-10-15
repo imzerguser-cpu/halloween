@@ -183,13 +183,14 @@
   const VOICE_LINES = { 1: ['거기 누구 있어?', '쉿… 조용히 해…', '누구야…?', '나가!'], 2: ['같이… 놀자…', '히히히히히…', '뒤를… 봐…', '여기서… 나가…', '찾았다…'] };
   // 실제 같은 효과음(여자 비명 등): Apps Script 가 ElevenLabs 로 한 번 만들어 둔 것을 받아 이 태블릿에 저장. 없으면 null
   const sfxClips = {};
+  const SFX_PROMPTS = {"steps": "Slow footsteps walking in an empty dark school hallway, getting closer, quiet, eerie, no music", "rustle": "Soft rustling of clothes very close behind you, subtle and quiet, eerie, no music", "drag": "Feet slowly dragging and shuffling across a wooden floor, quiet, eerie, no music", "desk": "A school desk being slowly dragged across the floor in an empty classroom, scraping, eerie, no music", "door": "An old wooden door slowly creaking open in a quiet empty building, eerie, no music", "wind": "Cold eerie wind blowing softly through a dark empty hallway, no music", "murmur": "Quiet indistinct whispering voices very close to the ear, eerie, horror, no music", "laughW": "A creepy woman laughing slowly and eerily in a dark empty school hallway, close, horror movie, no music", "laughM": "A deep creepy middle-aged man laughing menacingly, slow, close, horror movie, no music", "babyCry": "A baby crying in the distance inside an empty dark building, eerie echo, horror movie, no music", "catCry": "A cat yowling eerily at night, long creepy meow, close, no music", "girlCry": "A little girl sobbing and crying softly in a dark empty classroom, eerie, close, horror movie, no music"};
   async function sfxClip(name) {
     if (sfxClips[name]) return sfxClips[name];
     const k = 'sfx|' + name;
     let blob = await ttsDb.get(k).catch(() => null);
     if (!blob && conf.apiUrl && conf.apiKey && navigator.onLine) {
       try {
-        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, action: 'sfx', name }) });
+        const r = await fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: conf.apiKey, action: 'sfx', name, prompt: SFX_PROMPTS[name] || '' }) });
         const j = await r.json();
         if (j.ok && j.data) {
           const bin = atob(j.data), u8 = new Uint8Array(bin.length);
@@ -202,7 +203,32 @@
     if (blob) sfxClips[name] = blob;
     return blob || null;
   }
-  const prefetchSfx = () => { ['scream', 'scream2', 'laugh'].forEach((n) => sfxClip(n).catch(() => {})); };
+  // 큰 소리: ElevenLabs 로 만든 실제 같은 소리 (사용자 요청 2026-10-15: 여자·아저씨 웃음, 아기·고양이·여자아이 울음)
+  const LOUD_CLIPS = ['laughW', 'laughM', 'babyCry', 'catCry', 'girlCry'];
+  // 은은한 소리 (사용자 요청 2026-10-15): 발자국·옷깃·발 끌기·책상 끌기·문·바람·속삭임 + 작은 목소리
+  const SOFT_CLIPS = ['steps', 'rustle', 'drag', 'desk', 'door', 'wind', 'murmur'];
+  const SOFT_LINES = ['나랑 같이 놀자…', '무서워…', '외로워…', '쉿…'];
+  const prefetchSfx = () => { ['scream', 'scream2', 'laugh'].concat(LOUD_CLIPS, SOFT_CLIPS).forEach((n) => sfxClip(n).catch(() => {})); };
+  /** 은은한 소리: 실제 같은 소리 또는 작은 목소리, 아직 못 받았으면 합성 소리 */
+  async function playSoft(vol) {
+    if (Math.random() < 0.3) {                                                 // 작은 목소리
+      const text = SOFT_LINES[Math.floor(Math.random() * SOFT_LINES.length)];
+      try {
+        if (ttsProvider()) { const clip = await ttsClip(text, 0); if (clip) { const a = new Audio(URL.createObjectURL(clip)); a.volume = Math.max(0, Math.min(1, vol * 0.7)); a.play().catch(() => {}); return 'voice'; } }
+      } catch (e) {}
+      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = Math.max(0.1, vol * 0.6); u.rate = 0.7; u.pitch = 1.3; try { speechSynthesis.speak(u); } catch (e) {} return 'voice'; }
+    }
+    const ready = SOFT_CLIPS.filter((n) => sfxClips[n]);
+    if (ready.length) { const n = ready[Math.floor(Math.random() * ready.length)]; playClip(n, vol); return n; }
+    if (window.Sfx) Sfx.play(null, vol);
+    return '';
+  }
+  function playClip(name, vol) {
+    const blob = sfxClips[name];
+    if (!blob) return false;
+    const a = new Audio(URL.createObjectURL(blob)); a.volume = Math.max(0, Math.min(1, vol)); a.play().catch(() => {});
+    return true;
+  }
   /** 여자 비명 → 없으면 합성 비명 */
   async function playScream(vol) {
     const blob = sfxClips.scream || sfxClips.scream2 ? (Math.random() < 0.5 ? sfxClips.scream || sfxClips.scream2 : sfxClips.scream2 || sfxClips.scream) : null;
@@ -225,12 +251,12 @@
   /** 단계별 큰 소리: 2단계 = 쨍그랑·쾅·사람 목소리, 3단계 = 귀신 목소리·비명·굉음 */
   function playLoud(fear) {
     if (!window.Sfx) return;
-    const pool = fear === 2 ? ['voice', 'voice', 'scream', 'laugh', 'glass'] : ['glass', 'glass', 'slam', 'pound', 'voice'];
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const pool = fear === 2 ? LOUD_CLIPS.concat(['scream', 'voice']) : LOUD_CLIPS.slice();
+    const ready = pool.filter((n) => n === 'voice' || (n === 'scream' ? sfxClips.scream || sfxClips.scream2 : sfxClips[n]));
+    const pick = (ready.length ? ready : pool)[Math.floor(Math.random() * (ready.length ? ready : pool).length)];
     if (pick === 'voice') spookVoice(fear);
     else if (pick === 'scream') playScream(loudVol());
-    else if (pick === 'laugh') { if (sfxClips.laugh) { const a = new Audio(URL.createObjectURL(sfxClips.laugh)); a.volume = loudVol(); a.play().catch(() => {}); } else spookVoice(2); }
-    else Sfx.loud(pick, loudVol());
+    else if (!playClip(pick, loudVol())) Sfx.loud(['glass', 'slam', 'pound'][Math.floor(Math.random() * 3)], loudVol());   // 아직 못 받았으면 합성 소리
   }
   /** 은은한 소리로 긴장시키고, 큰 소리가 켜져 있으면 3~6초 뒤 쾅! */
   function scheduleSpook(minMs, maxMs, name, softOnly) {
@@ -238,7 +264,7 @@
     const soft = sfxOn(), loud = !softOnly && loudOn();
     if (!soft && !loud) return;
     const at = minMs + Math.random() * Math.max(0, maxMs - minMs);
-    if (soft) spookTimer = setTimeout(() => { if (stream) Sfx.play(name, sfxVol()); }, at);
+    if (soft) spookTimer = setTimeout(() => { if (stream) playSoft(sfxVol()); }, at);
     if (loud) loudTimer = setTimeout(() => { if (stream) playLoud(teamFear(cur.group)); }, soft ? at + 3000 + Math.random() * 3000 : at);
   }
   document.addEventListener('pointerdown', () => { if (window.Sfx) Sfx.unlock(); });
@@ -652,6 +678,12 @@
       body: JSON.stringify({ key: conf.apiKey, action: 'cue', station: s.id, group: cur.group, fear: fear !== undefined ? fear : teamFear(cur.group), kind }) })
       .then((r) => r.json()).catch(() => ({ ok: false, error: 'net' }));
   }
+  window.HG_softPreview = async (vol) => { await Promise.all(SOFT_CLIPS.map((n) => sfxClip(n).catch(() => null))); return playSoft(vol); };
+  window.HG_loudPreview = async (vol) => {
+    const n = LOUD_CLIPS[Math.floor(Math.random() * LOUD_CLIPS.length)];
+    await sfxClip(n).catch(() => null);
+    return playClip(n, vol) ? n : '';
+  };
   function startStudentCamera() {
     if (!window.Intensity || Intensity.boardOn(cache.settings, teamFear(cur.group))) sendCue('camera');   // 단계별 칠판 글씨 설정
     const t = stType();
@@ -793,7 +825,7 @@
     const x = c.getContext('2d'), base = Math.min(0.88, Math.max(0.66, p.alpha + 0.3)), t0 = performance.now(), fin = 250, fout = 350;
     const glitch = () => { v.classList.add('glitch'); setTimeout(() => v.classList.remove('glitch'), 140); };
     glitch();
-    if (sfxOn() && window.Sfx) Sfx.play('whisper', sfxVol());
+    if (sfxOn()) playSoft(sfxVol());
     const frame = (now) => {
       const t = now - t0, total = fin + hold + fout;
       x.clearRect(0, 0, c.width, c.height);
