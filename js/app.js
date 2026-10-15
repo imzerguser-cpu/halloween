@@ -183,7 +183,7 @@
   const VOICE_LINES = { 1: ['거기 누구 있어?', '쉿… 조용히 해…', '누구야…?', '나가!'], 2: ['같이… 놀자…', '히히히히히…', '뒤를… 봐…', '여기서… 나가…', '찾았다…'] };
   // 실제 같은 효과음(여자 비명 등): Apps Script 가 ElevenLabs 로 한 번 만들어 둔 것을 받아 이 태블릿에 저장. 없으면 null
   const sfxClips = {};
-  const SFX_PROMPTS = {"laughW": "A creepy woman laughing slowly and eerily in a dark empty school hallway, close, horror movie, no music", "laughM": "A deep creepy middle-aged man laughing menacingly, slow, close, horror movie, no music", "babyCry": "A baby crying in the distance inside an empty dark building, eerie echo, horror movie, no music", "catCry": "A cat yowling eerily at night, long creepy meow, close, no music", "girlCry": "A little girl sobbing and crying softly in a dark empty classroom, eerie, close, horror movie, no music", "steps2": "Clear close footsteps walking slowly on a hard school hallway floor, eerie, horror movie, no music", "rustle2": "Clear close sound of clothes rustling right behind the listener, eerie, horror movie, no music", "drag2": "Clear close sound of feet slowly dragging and scraping across a wooden floor, eerie, horror movie, no music", "desk2": "Loud clear sound of a heavy school desk being dragged and scraping across the floor, eerie, horror movie, no music", "door2": "Clear loud creak of an old wooden door slowly opening, eerie, horror movie, no music", "wind2": "Clear howling eerie wind blowing through a dark hallway, horror movie, no music", "murmur2": "Clear close whispering voices right next to the ear, eerie, horror movie, no music"};
+  const SFX_PROMPTS = {"laughW": "A creepy woman laughing slowly and eerily in a dark empty school hallway, close, horror movie, no music", "laughM": "A deep creepy middle-aged man laughing menacingly, slow, close, horror movie, no music", "babyCry": "A baby crying in the distance inside an empty dark building, eerie echo, horror movie, no music", "catCry": "A cat yowling eerily at night, long creepy meow, close, no music", "girlCry": "A little girl sobbing and crying softly in a dark empty classroom, eerie, close, horror movie, no music", "steps2": "Clear close footsteps walking slowly on a hard school hallway floor, eerie, horror movie, no music", "rustle2": "Clear close sound of clothes rustling right behind the listener, eerie, horror movie, no music", "drag2": "Clear close sound of feet slowly dragging and scraping across a wooden floor, eerie, horror movie, no music", "desk2": "Loud clear sound of a heavy school desk being dragged and scraping across the floor, eerie, horror movie, no music", "door2": "Clear loud creak of an old wooden door slowly opening, eerie, horror movie, no music", "wind2": "Clear howling eerie wind blowing through a dark hallway, horror movie, no music", "murmur2": "Clear close whispering voices right next to the ear, eerie, horror movie, no music", "laughBoy": "A creepy little boy laughing in an empty dark school hallway, close, horror movie, no music", "owl": "Clear eerie owl hooting at night in the woods, close, no music", "crickets": "Clear crickets chirping on a quiet dark night outside a window, eerie, no music", "rain": "Clear rain tapping against a classroom window at night, eerie, no music", "thunder": "Distant rolling thunder on a stormy night, deep rumble, eerie, no music", "crow": "Clear crows cawing eerily at dusk, close, no music"};
   let sfxErr = '';
   const sfxPending = {};
   function sfxClip(name) {
@@ -210,10 +210,9 @@
     return blob || null;
   }
   // 큰 소리: ElevenLabs 로 만든 실제 같은 소리 (사용자 요청 2026-10-15: 여자·아저씨 웃음, 아기·고양이·여자아이 울음)
-  const LOUD_CLIPS = ['laughW', 'laughM', 'babyCry', 'catCry', 'girlCry'];
+  const LOUD_CLIPS = ['laughW', 'laughM', 'laughBoy', 'babyCry', 'catCry', 'girlCry'];
   // 은은한 소리 (사용자 요청 2026-10-15): 발자국·옷깃·발 끌기·책상 끌기·문·바람·속삭임 + 작은 목소리
-  const SOFT_CLIPS = ['steps2', 'rustle2', 'drag2', 'desk2', 'door2', 'wind2', 'murmur2'];   // 2: 또렷하게 다시 만든 소리
-  const SOFT_LINES = ['나랑 같이 놀자…', '무서워…', '외로워…', '쉿…'];
+  const SOFT_CLIPS = ['steps2', 'rustle2', 'drag2', 'desk2', 'door2', 'wind2', 'murmur2', 'owl', 'crickets', 'rain', 'thunder', 'crow'];   // 2: 또렷하게 다시 만든 소리
   // ElevenLabs 무료 요금제는 동시에 2개까지라 하나씩 차례로 받는다
   let prefetching = null;
   const prefetchSfx = () => prefetching || (prefetching = (async () => {
@@ -222,13 +221,6 @@
   })());
   /** 은은한 소리: 실제 같은 소리 또는 작은 목소리, 아직 못 받았으면 합성 소리 */
   async function playSoft(vol) {
-    if (Math.random() < 0.3) {                                                 // 작은 목소리
-      const text = SOFT_LINES[Math.floor(Math.random() * SOFT_LINES.length)];
-      try {
-        if (ttsProvider()) { const clip = await ttsClip(text, 0); if (clip) { const a = new Audio(URL.createObjectURL(clip)); a.volume = Math.max(0, Math.min(1, vol * 0.7)); a.play().catch(() => {}); return 'voice'; } }
-      } catch (e) {}
-      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = Math.max(0.1, vol * 0.6); u.rate = 0.7; u.pitch = 1.3; try { speechSynthesis.speak(u); } catch (e) {} return 'voice'; }
-    }
     const ready = SOFT_CLIPS.filter((n) => sfxClips[n]);
     if (ready.length) { const n = ready[Math.floor(Math.random() * ready.length)]; playClip(n, vol); return n; }
     if (window.Sfx) Sfx.play(null, vol);
@@ -587,7 +579,6 @@
       if (isStartStation()) await ttsClip(cleanSpeech(prologueText(lv)), lv).catch(() => {});
     }
     for (const f of [1, 2]) for (const line of VOICE_LINES[f]) await ttsClip(line, f).catch(() => {});
-    for (const line of SOFT_LINES) await ttsClip(line, 0).catch(() => {});   // 은은한 소리의 작은 목소리
   }
   const cleanSpeech = (t) => String(t || '').replace(/[「」📜😊]/g, '').trim();
   async function narrate(text, opts) {
