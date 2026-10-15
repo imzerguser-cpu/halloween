@@ -81,6 +81,16 @@
       stationCount: roster.stations.filter((s) => s.ghost).length,
       stations: roster.stations,
       rawStations: roster.raw,
+      onSfx: async (name, vol) => {
+        const m = /^line(2?):(.*)$/.exec(name);
+        stopPreview();
+        if (m) { speakWeb(m[2], m[1] ? 2 : 0); return {}; }
+        const j = await post({ action: 'sfx', name });
+        previewAudio = new Audio(URL.createObjectURL(b64ToBlob(j.data, j.mime || 'audio/mpeg')));
+        previewAudio.volume = Math.max(0, Math.min(1, vol));
+        await previewAudio.play();
+        return {};
+      },
       onStop: stopPreview,
       onPreview: async (o, lv, which) => {
         const LV = ['너무', '조금', '안무서움'];

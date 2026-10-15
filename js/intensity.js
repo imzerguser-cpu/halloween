@@ -43,8 +43,13 @@
   const yes = (v) => String(v).trim() === '예';
   const num = (v, d, lo, hi) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 
+  // 소리 목록: [이름, 화면 표시]. line: 으로 시작하면 목소리 대사
+  const SOFT_LIST = [['steps', '발자국'], ['rustle', '옷깃 스치는 소리'], ['drag', '발 끄는 소리'], ['desk', '책상 끌리는 소리'], ['door', '문 열리는 소리'], ['wind', '바람 소리'], ['murmur', '소곤소곤 속삭임'],
+    ['line:나랑 같이 놀자…', '"나랑 같이 놀자…"'], ['line:무서워…', '"무서워…"'], ['line:외로워…', '"외로워…"'], ['line:쉿…', '"쉿…"']];
+  const LOUD_LIST = [['laughW', '여자 웃음소리'], ['laughM', '아저씨 웃음소리'], ['babyCry', '아기 울음소리'], ['catCry', '고양이 울음소리'], ['girlCry', '여자아이 울음소리'],
+    ['scream', '여자 비명'], ['scream2', '여자아이 비명'], ['laugh', '여자아이 킥킥 웃음'], ['line2:같이… 놀자…', '귀신 목소리 "같이… 놀자…"'], ['line2:찾았다…', '귀신 목소리 "찾았다…"']];
   const api = {
-    LEVELS, DEF, get,
+    LEVELS, DEF, get, SOFT_LIST, LOUD_LIST,
     ghostCount: (st, fear) => Math.round(num(get(st, '귀신수_' + lv(fear)), 1, 0, 9)),
     softOn: (st, fear) => yes(get(st, '은은한소리_' + lv(fear))),
     loudOn: (st, fear) => yes(get(st, '큰소리_' + lv(fear))),
@@ -70,7 +75,7 @@
     offIds: (st) => (window.HG_TOUR && HG_TOUR.modeOf(st) === '코스' ? [] : String(get(st, '쉬는장소') || '').split(/[,\s]+/).filter(Boolean)),   // 마동 코스는 코스 장소 목록이 곧 쓰는 장소
 
     /** el 안에 설정 화면을 그린다. onSave(바뀐값) → Promise<새 settings> */
-    render(el, st, { onSave, onPreview, onStop, stationCount, stations, rawStations } = {}) {
+    render(el, st, { onSave, onPreview, onStop, onSfx, stationCount, stations, rawStations } = {}) {
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
       const max = Math.max(1, stationCount || 4);
       const sel = (k) => `<select data-k="${k}">${Array.from({ length: max + 1 }, (_, i) => `<option value="${i}"${String(i) === get(st, k) ? ' selected' : ''}>${i}곳</option>`).join('')}</select>`;
@@ -85,6 +90,13 @@
   <p class="int-help">1·2학년 동생이 있다고 한 조는 위 설정과 관계없이 귀신과 소리가 없습니다. 은은한 소리는 촬영 중 몇 초 뒤, 큰 소리는 그 3~6초 뒤에 납니다. 깜짝 얼굴을 켠 조는 카운트다운 끝 무렵 큰 얼굴이 화면 가득 0.7초 나오며 큰 소리가 납니다(이때는 따로 큰 소리를 내지 않음).</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
   ${rng('큰소리크기', '큰 소리 크기', 'loud')}
+  <div class="int-row int-sfx"><span>은은한 소리 하나씩 듣기</span>
+    ${api.SOFT_LIST.map(([n, t]) => `<button type="button" class="int-play" data-sfx="${n}" data-kind="soft">▶ ${t}</button>`).join('')}
+  </div>
+  <div class="int-row int-sfx"><span>큰 소리 하나씩 듣기</span>
+    ${api.LOUD_LIST.map(([n, t]) => `<button type="button" class="int-play" data-sfx="${n}" data-kind="loud">▶ ${t}</button>`).join('')}
+  </div>
+  <p class="int-help">처음 누를 때는 소리를 만드느라 몇 초 걸려요(한 번 만들면 저장돼서 바로 나와요). 음량은 위 크기 막대를 따라요.</p>
   <div class="int-row"><span>찍은 뒤 학생에게 보여 주기</span>
     ${[['즉시', '수정본 바로 보여 주기'], ['원본', '원본만 보여 주기'], ['숨김', '사진 안 보여 주기']].map(([v, t]) => `<label class="int-chk"><input type="radio" name="int-reveal" data-k="공개방식" value="${v}"${reveal === v ? ' checked' : ''}> ${t}</label>`).join('')}
   </div>
@@ -176,6 +188,15 @@
 </div>`;
       const msg = (t, ok) => { const m = el.querySelector('.int-msg'); m.textContent = t; m.style.color = ok === false ? '#ff9aa8' : ok ? '#9ce6b4' : ''; };
       el.querySelectorAll('input[type=range]').forEach((r) => { r.oninput = () => { el.querySelector(`[data-v="${r.dataset.k}"]`).textContent = Math.round(r.value * 100) + '%'; }; });
+      el.querySelectorAll('[data-sfx]').forEach((b) => {
+        b.onclick = async () => {
+          if (!onSfx) return msg('이 화면에서는 들을 수 없어요', false);
+          const vol = parseFloat(el.querySelector(`input[data-k="${b.dataset.kind === 'loud' ? '큰소리크기' : '효과음크기'}"]`).value);
+          msg('🔊 ' + b.textContent.replace('▶ ', '') + ' 준비 중...');
+          try { const r = await onSfx(b.dataset.sfx, vol, b.dataset.kind); msg(r && r.error ? r.error : '🔊 ' + b.textContent.replace('▶ ', ''), !(r && r.error)); }
+          catch (e) { msg('듣기 실패: ' + e.message, false); }
+        };
+      });
       el.querySelectorAll('[data-play]').forEach((b) => {
         b.onclick = () => {
           if (!window.Sfx) return msg('소리 기능을 불러오지 못했어요', false);
@@ -280,6 +301,7 @@
 .int-chk{display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:14px;color:#e8eaf0;cursor:pointer}.int-chk input{width:auto}
 .int-help{font-size:13px;color:#a9aec0;margin:6px 0 12px}.int-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}.int-row>span:first-child{font-size:14px;color:#a9aec0;min-width:150px}
 .int-course{margin:0;padding-left:22px}.int-course li{display:flex;align-items:center;gap:6px;margin:4px 0}.int-course li button{padding:3px 9px;font-size:12px;background:#252935;color:#e8eaf0}
+.int-sfx button{padding:6px 10px;font-size:13px}
 .int-pin input{width:190px;padding:8px 10px;border-radius:8px;border:1px solid #3a3f50;background:#0f1116;color:#fff;font-size:15px}
 .int-vol{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;font-size:14px}.int-vol span{min-width:150px;color:#a9aec0}.int-vol input{width:200px}.int-vol b{min-width:44px}
 .int button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(180deg,#ffd98f,#e9a94a);color:#3a2408;font-family:inherit}

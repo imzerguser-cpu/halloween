@@ -1406,6 +1406,19 @@
       stationCount: ghostStations().length,
       stations: cache.stations,
       rawStations: cache.raw,
+      onSfx: async (name, vol) => {
+        if (window.Sfx) Sfx.unlock();
+        const m = /^line(2?):(.*)$/.exec(name);
+        if (m) {                                                                // 목소리 대사: 작은 목소리(은은) / 귀신 목소리(큰)
+          const lv = m[1] ? 2 : 0;
+          if (ttsProvider()) { const clip = await ttsClip(m[2], lv); if (clip) { const a = new Audio(URL.createObjectURL(clip)); a.volume = Math.max(0, Math.min(1, m[1] ? vol : vol * 0.7)); await a.play(); return {}; } }
+          const u = new SpeechSynthesisUtterance(m[2]); u.lang = 'ko-KR'; u.volume = 1; u.rate = m[1] ? 0.6 : 0.7; u.pitch = m[1] ? 0.2 : 1.3; speechSynthesis.speak(u);
+          return {};
+        }
+        const blob = await sfxClip(name);
+        if (!blob) return { error: '소리를 받지 못했어요. 시트 스크립트(Code.gs)를 새 버전으로 배포했는지 확인해 주세요.' };
+        playClip(name, vol); return {};
+      },
       onStop: stopNarration,
       samplePreview: true,
       onPreview: async (o, lv, which) => {
