@@ -862,7 +862,7 @@
     stopBoardRec();
     stopScan();
     stopScreenGhost();
-    clearTimeout(spookTimer); clearTimeout(loudTimer);
+    clearTimeout(spookTimer); clearTimeout(loudTimer); stopRecSpooks();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null; $('camVideo').srcObject = null;
   }
@@ -1196,7 +1196,7 @@
     recorder = { mr, done, limitMs, auto: false };
     mr.start(1000);
     recStart = performance.now();
-    scheduleSpook(3000, Math.max(3500, Math.min(9000, limitMs - 2000)));   // 녹화 중에 나서 영상에도 담긴다
+    startRecSpooks();   // 녹화 중간중간 소리 → 영상에도 담긴다
     $('camRec').hidden = false; $('btnStop').hidden = false;
     const fmt = (ms) => (ms / 1000).toFixed(1);
     recTimer = setInterval(() => {
@@ -1208,13 +1208,31 @@
     }, 100);
     recLimit = setTimeout(() => { if (recorder) { recorder.auto = true; finishVideo(); } }, limitMs);
   }
+  /** 영상 미션(1학년 교실 컵 쌓기·6학년 교실 탁구공) 녹화 중: 은은한 소리를 6~11초마다, 큰 소리는 세 번에 한 번꼴.
+   *  조의 무서움 단계 표를 따른다(큰 소리 칸이 꺼진 단계는 은은한 소리만, 1·2학년 조는 소리 없음). */
+  let recSpookTimer = null;
+  function startRecSpooks() {
+    stopRecSpooks();
+    clearTimeout(spookTimer); clearTimeout(loudTimer);
+    const soft = sfxOn(), loud = loudOn();
+    if (!soft && !loud) return;
+    let n = 0;
+    const tick = () => {
+      if (!recorder || !stream) return;
+      n++;
+      if (loud && (!soft || n % 3 === 0)) playLoud(teamFear(cur.group)); else playSoft(sfxVol());
+      recSpookTimer = setTimeout(tick, soft ? 6000 + Math.random() * 5000 : 12000 + Math.random() * 6000);
+    };
+    recSpookTimer = setTimeout(tick, 3000 + Math.random() * 2000);
+  }
+  function stopRecSpooks() { clearTimeout(recSpookTimer); recSpookTimer = null; }
   document.addEventListener('visibilitychange', () => { if (document.hidden && recorder) finishVideo(); });
 
   let finishing = false;
   async function finishVideo() {
     if (finishing || !recorder) return;
     finishing = true;
-    clearInterval(recTimer); clearTimeout(recLimit);
+    clearInterval(recTimer); clearTimeout(recLimit); stopRecSpooks();
     const r0 = recorder;
     const durationMs = Math.round(performance.now() - recStart);
     try { if (r0.mr.state !== 'inactive') r0.mr.stop(); } catch (e) {}
