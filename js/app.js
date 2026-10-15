@@ -645,11 +645,12 @@
     show('scrMission');
   }
   // 칠판 신호: 이 장소의 전자칠판(board.html)이 분필 글씨를 쓰게 한다 (기다리지 않음)
-  function sendCue(kind) {
+  function sendCue(kind, fear) {
     const s = station();
-    if (!s || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return;
-    fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ key: conf.apiKey, action: 'cue', station: s.id, group: cur.group, fear: teamFear(cur.group), kind }) }).catch(() => {});
+    if (!s || !conf.apiUrl || !conf.apiKey || !navigator.onLine) return Promise.resolve({ ok: false, error: !conf.apiKey ? 'nokey' : 'offline' });
+    return fetch(conf.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: conf.apiKey, action: 'cue', station: s.id, group: cur.group, fear: fear !== undefined ? fear : teamFear(cur.group), kind }) })
+      .then((r) => r.json()).catch(() => ({ ok: false, error: 'net' }));
   }
   function startStudentCamera() {
     sendCue('camera');
@@ -1595,8 +1596,14 @@
     $('btnWipe').onclick = wipe;
     $('btnBgShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('background'); };
     $('btnTestShot').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); openCamera('test'); };
-    $('btnScreenGhostTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = false; openCamera('screentest'); };
-    $('btnJumpTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = true; if (window.Sfx) Sfx.unlock(); openCamera('screentest'); };
+    $('btnScreenGhostTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = false; sendCue('test', 2); openCamera('screentest'); };
+    $('btnCueTest').onclick = async () => {
+      if (!station()) return toast('장소를 먼저 고르세요');
+      toast('칠판에 신호를 보내는 중...');
+      const j = await sendCue('test', 2);
+      toast(j && j.ok ? `칠판 신호를 보냈어요. "${station().name}" 칠판에 2~4초 안에 글씨가 써져요.` : j.error === 'key' ? '비밀 키가 맞지 않아요. 연결 탭에서 새 비밀 키를 넣어 주세요.' : j.error === 'action' ? '시트 스크립트가 예전 버전이에요. Code.gs 를 붙여 넣고 새 버전으로 배포해 주세요.' : j.error === 'nokey' ? '먼저 연결 탭에서 비밀 키를 넣어 주세요.' : '인터넷 연결을 확인해 주세요.', 6000);
+    };
+    $('btnJumpTest').onclick = () => { if (!station()) return toast('장소를 먼저 고르세요'); screenTestJump = true; sendCue('test', 2); if (window.Sfx) Sfx.unlock(); openCamera('screentest'); };
   }
 
   // ---------- 시작 ----------

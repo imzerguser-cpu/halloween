@@ -52,7 +52,7 @@
     <div id="msg"></div>
   </div>
 </div>
-<script src="js/tour.js?v=20261015215221"></script>
+<script src="js/tour.js?v=20261015221253"></script>
 <script>
 (function () {
   'use strict';
@@ -61,7 +61,7 @@
   const LS = 'hg_board';
   const read = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { return {}; } };
   const write = (o) => { try { localStorage.setItem(LS, JSON.stringify(o)); } catch (e) {} };
-  let conf = read(), settings = {}, lastT = 0, busy = false, pollTimer = null, wake = null, actx = null;
+  let lastPoll = '', conf = read(), settings = {}, lastT = 0, busy = false, pollTimer = null, wake = null, actx = null;
   // 무서움 단계별 기본 글씨 (시트 설정 탭 "칠판문구_너무/조금/안무서움" 에 / 로 줄을 나눠 적으면 그 글이 우선)
   const DEF = [['안녕?', '같이 놀자 :)'], ['같이 놀자'], ['같이 놀자', '너도 여기 남아']];
   const LV = ['너무', '조금', '안무서움'];
@@ -123,13 +123,14 @@
   async function poll() {
     try {
       const j = await get('cue', '&station=' + encodeURIComponent(conf.station));
+      lastPoll = j && j.ok ? '칠판 신호 확인 중 (마지막 ' + new Date().toLocaleTimeString() + ')' : j && j.error === 'key' ? '⚠ 비밀 키가 맞지 않아요' : '⚠ 시트 연결 오류';
       if (j && j.ok && j.cue && j.cue.t > lastT) {
         const fresh = (j.now || Date.now()) - j.cue.t < 20000;
         const first = lastT === 0;
         lastT = j.cue.t;
         if (fresh && !first) write_(linesFor(j.cue.fear));
       } else if (j && j.ok && lastT === 0) lastT = 1;
-    } catch (e) { /* 와이파이가 잠깐 끊겨도 계속 */ }
+    } catch (e) { lastPoll = '⚠ 인터넷 연결 확인 (' + new Date().toLocaleTimeString() + ')'; }
     pollTimer = setTimeout(poll, 2000);
   }
   async function begin() {
@@ -150,10 +151,15 @@
     setInterval(async () => { try { const j = await get('roster'); if (j.ok) settings = j.settings || {}; } catch (e) {} }, 60000);
   }
   $('start').onclick = begin;
-  $('test').onclick = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {} write_(linesFor(2)); };
+  $('test').onclick = async () => {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+    $('setup').hidden = true;
+    await write_(linesFor(2));
+    $('setup').hidden = false;
+  };
   document.addEventListener('visibilitychange', async () => { if (!document.hidden && navigator.wakeLock && $('setup').hidden) { try { wake = await navigator.wakeLock.request('screen'); } catch (e) {} } });
   let taps = 0, tapT = null;
-  $('hot').onclick = () => { taps++; clearTimeout(tapT); tapT = setTimeout(() => { taps = 0; }, 2500); if (taps >= 5) { taps = 0; clearTimeout(pollTimer); $('setup').hidden = false; } };
+  $('hot').onclick = () => { taps++; clearTimeout(tapT); tapT = setTimeout(() => { taps = 0; }, 2500); if (taps >= 5) { taps = 0; clearTimeout(pollTimer); $('setup').hidden = false; if (lastPoll) msg(lastPoll, /⚠/.test(lastPoll)); } };
 })();
 </script>
 </body>
