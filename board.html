@@ -52,11 +52,11 @@
     <div id="msg"></div>
   </div>
 </div>
-<script src="js/tour.js?v=20261015080922"></script>
+<script src="js/tour.js?v=20261015215221"></script>
 <script>
 (function () {
   'use strict';
-  const API = (new URLSearchParams(location.search).get('api')) || 'https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec';
+  const API = (new URLSearchParams(location.search).get('api')) || 'https://script.google.com/macros/s/AKfycbxTmQduDTWShxua_fxjRvedt5GN83AOcOgIOKbil9pqCMc__7CDCTP6IOS0IiiPVHoh/exec';
   const $ = (id) => document.getElementById(id);
   const LS = 'hg_board';
   const read = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { return {}; } };

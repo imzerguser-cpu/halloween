@@ -10,9 +10,11 @@
   const DEFAULT_PIN = '1031';
 
   // 구글 시트 웹 앱 주소는 미리 넣어 둔다 (주소만으로는 아무것도 볼 수 없고, 비밀 키가 있어야 한다)
-  const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec';
+  const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxTmQduDTWShxua_fxjRvedt5GN83AOcOgIOKbil9pqCMc__7CDCTP6IOS0IiiPVHoh/exec';
+  // 2026-10-15 개인 계정 스크립트로 옮김: 예전 주소가 저장된 태블릿은 새 주소로 (비밀 키는 다시 넣어야 함)
+  const OLD_API_URLS = ['https://script.google.com/macros/s/AKfycbymj5VOiN61_FIOvXO8tApwiUPoXAZ7hUUnIZRtvzyYd1gO8XSOQvJU-IGMGmJ74lq4gA/exec'];
   let conf = readLS(LS_CONF) || {};
-  if (!conf.apiUrl) conf.apiUrl = DEFAULT_API_URL;
+  if (!conf.apiUrl || OLD_API_URLS.includes(conf.apiUrl)) conf.apiUrl = DEFAULT_API_URL;
   let cache = readLS(LS_CACHE) || { stations: [], settings: {} };
   // 운영방식(인증샷 투어 / 미션)에 맞는 장소 목록. raw = 시트 장소 탭 그대로
   const effStations = (raw, st) => (window.HG_TOUR ? HG_TOUR.stations(raw, st) : raw || []);
