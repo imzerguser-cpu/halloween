@@ -85,10 +85,16 @@
         const m = /^line(2?):(.*)$/.exec(name);
         stopPreview();
         if (m) { speakWeb(m[2], m[1] ? 2 : 0); return {}; }
-        const j = await post({ action: 'sfx', name });
-        previewAudio = new Audio(URL.createObjectURL(b64ToBlob(j.data, j.mime || 'audio/mpeg')));
-        previewAudio.volume = Math.max(0, Math.min(1, vol));
-        await previewAudio.play();
+        let j; try { j = await post({ action: 'sfx', name }); } catch (e) { return { error: '소리를 받지 못했어요: ' + (/name|action/.test(e.message) ? '시트 스크립트가 예전 버전이에요(Code.gs 붙여 넣고 새 버전 배포)' : e.message) }; }
+        const blob = b64ToBlob(j.data, j.mime || 'audio/mpeg');
+        try {                                                                   // 작게 만들어진 소리도 또렷하게: 가장 큰 부분 기준으로 키움
+          const ctx = window.__sfxCtx || (window.__sfxCtx = new (window.AudioContext || window.webkitAudioContext)());
+          if (ctx.state === 'suspended') await ctx.resume();
+          const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+          let peak = 0; for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < d.length; i += 8) peak = Math.max(peak, Math.abs(d[i])); }
+          const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.value = Math.min(12, 0.95 / Math.max(peak, 0.02)) * Math.max(0, Math.min(1, vol));
+          src.connect(g); g.connect(ctx.destination); src.start();
+        } catch (e) { previewAudio = new Audio(URL.createObjectURL(blob)); previewAudio.volume = Math.max(0, Math.min(1, vol)); await previewAudio.play(); }
         return {};
       },
       onStop: stopPreview,
