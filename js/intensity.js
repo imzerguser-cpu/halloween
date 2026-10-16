@@ -20,7 +20,7 @@
     '구글목소리_너무': 'ko-KR-Neural2-A', '구글목소리_조금': 'ko-KR-Neural2-B', '구글목소리_안무서움': 'ko-KR-Neural2-C',
     '애저목소리_너무': 'ko-KR-SunHiNeural', '애저목소리_조금': 'ko-KR-JiMinNeural', '애저목소리_안무서움': 'ko-KR-SoonBokNeural',
     '공개방식': '즉시', '저학년질문': '예', '무서움질문': '예', '조선정': '자동', '조수': '12', '학교이름': '마동초등학교', '나레이션': '예', '나레이션방식': '태블릿',
-    '운영방식': '코스', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '둘다', '칠판녹화': '예', '칠판장소': 'class1'
+    '운영방식': '코스', '촬영방식': '미션대로', '자유배치': '예', '쉬는장소': '', '귀신보기': '화면', '놀람촬영': '둘다', '칠판녹화': '예', '칠판장소': 'class1', '칠판도착장소': 'science,class6'
   };
   function get(st, k) {
     st = st || {};
@@ -70,6 +70,8 @@
     freeGhost: (st) => yes(get(st, '자유배치')),
     /** 칠판 글씨가 나오는 장소(칠판장소)에서 카메라를 켜면 학생 반응을 영상으로 */
     boardRecAt: (st, id) => yes(get(st, '칠판녹화')) && String(get(st, '칠판장소') || '').split(/[,\s]+/).includes(id),
+    /** 도착하면 칠판 글씨가 나오는 장소(칠판도착장소): 조 번호를 누르고 몇 초 뒤 소리와 함께 칠판이 켜졌다 꺼진다. 나머지 장소는 카메라를 켤 때 */
+    boardArriveAt: (st, id) => String(get(st, '칠판도착장소') || '').split(/[,\s]+/).includes(id),
     /** 귀신이 나온 순간 학생 반응 찍기: 끔 · 연사(5장) · 영상 · 둘다 */
     reactMode: (st) => (['끔', '연사', '영상', '둘다'].includes(get(st, '놀람촬영')) ? get(st, '놀람촬영') : '둘다'),
     /** 귀신 보이는 방법: 화면 · 사진 · 둘다 */
@@ -130,6 +132,10 @@
     <label class="int-chk"><input type="checkbox" data-k="칠판녹화"${yes(get(st, '칠판녹화')) ? ' checked' : ''}> 전자칠판이 있는 장소에서 카메라를 켜면 14초 동안 학생 반응을 영상으로 몰래 녹화</label>
     <label class="int-chk">칠판 장소 id <input type="text" data-k="칠판장소" value="${esc(get(st, '칠판장소'))}" style="width:120px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
   </div>
+  <div class="int-row"><span>도착하면 칠판 글씨</span>
+    <label class="int-chk">장소 id <input type="text" data-k="칠판도착장소" value="${esc(get(st, '칠판도착장소'))}" style="width:160px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
+  </div>
+  <p class="int-help">여기 적은 장소(쉼표로 구분, 기본 science,class6)는 조 번호를 누르고 몇 초 뒤 전자칠판이 소리와 함께 켜져 글씨를 쓰고 다시 꺼집니다. 적지 않은 장소(예: class1)는 지금처럼 인증샷 카메라를 켤 때 글씨가 나옵니다. 칠판마다 board.html 에서 그 장소를 골라 두세요.</p>
   <h3 class="int-h">🔊 이야기 나레이션</h3>
   <div class="int-row"><span>이야기 읽어 주기</span>
     <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>

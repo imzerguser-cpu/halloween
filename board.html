@@ -40,7 +40,7 @@
 <div id="setup">
   <div class="card">
     <h1>🧑‍🏫 칠판 화면 준비</h1>
-    <p>전자칠판에서 이 화면을 열어 두면, 정한 장소의 태블릿에서 학생들이 인증샷 카메라를 켤 때 검은 칠판에 분필 글씨가 저절로 써집니다. 시작하면 화면이 꺼진 것처럼 검게 바뀌어요. 다시 설정하려면 왼쪽 위 모서리를 빠르게 5번 누르세요.</p>
+    <p>전자칠판에서 이 화면을 열어 두면, 정한 장소의 태블릿에서 학생들이 인증샷 카메라를 켤 때(과학실·6학년 교실처럼 '도착하면 칠판 글씨' 장소는 조 번호를 누르고 몇 초 뒤 소리와 함께) 검은 칠판에 분필 글씨가 저절로 써집니다. 시작하면 화면이 꺼진 것처럼 검게 바뀌어요. 다시 설정하려면 왼쪽 위 모서리를 빠르게 5번 누르세요.</p>
     <label>비밀 키 (태블릿과 같은 값)</label>
     <input id="key" type="password" autocomplete="off">
     <label>이 칠판이 있는 장소</label>
@@ -52,7 +52,9 @@
     <div id="msg"></div>
   </div>
 </div>
-<script src="js/tour.js?v=20261016002840"></script>
+<script src="js/tour.js?v=20261016090739"></script>
+<script src="js/sfx.js?v=20261016090739"></script>
+<script src="js/intensity.js?v=20261016090739"></script>
 <script>
 (function () {
   'use strict';
@@ -96,11 +98,20 @@
     } catch (e) {}
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  async function write_(lines) {
+  // 칠판이 켜질 때 소리: 1·2학년 조나 큰 소리가 꺼진 단계는 은은한 소리(삐걱·똑똑), 아니면 큰 소리(쾅·굉음·쿵)
+  function boardSound(fear) {
+    if (!window.Sfx) return;
+    const I = window.Intensity, young = fear !== 0 && fear !== 1 && fear !== 2;
+    if (!young && (!I || I.loudOn(settings, fear))) Sfx.loud(['slam', 'boom', 'impact'][Math.floor(Math.random() * 3)], I ? I.loudVol(settings) : 1);
+    else Sfx.play(Math.random() < 0.5 ? 'creak' : 'knock', I ? I.softVol(settings) : 0.6);
+  }
+  const arriveHere = () => !!(window.Intensity && Intensity.boardArriveAt(settings, conf.station));
+  async function write_(lines, sound) {
     if (busy) return; busy = true;
     const board = $('board'), text = $('text');
     text.classList.remove('erase'); text.innerHTML = '';
     await sleep(900);
+    if (sound) boardSound(sound.fear);
     board.classList.add('on', 'flicker'); setTimeout(() => board.classList.remove('flicker'), 1000);
     await sleep(1300);
     for (const line of lines) {
@@ -128,7 +139,10 @@
         const fresh = (j.now || Date.now()) - j.cue.t < 20000;
         const first = lastT === 0;
         lastT = j.cue.t;
-        if (fresh && !first) write_(linesFor(j.cue.fear));
+        if (fresh && !first) {
+          if (arriveHere()) sleep(1000 + Math.random() * 1500).then(() => write_(linesFor(j.cue.fear), { fear: j.cue.fear }));   // 도착 뒤 몇 초 → 소리와 함께 켜짐
+          else write_(linesFor(j.cue.fear));
+        }
       } else if (j && j.ok && lastT === 0) lastT = 1;
     } catch (e) { lastPoll = '⚠ 인터넷 연결 확인 (' + new Date().toLocaleTimeString() + ')'; }
     pollTimer = setTimeout(poll, 2000);
@@ -144,6 +158,7 @@
     } catch (e) { return msg('연결 실패: 인터넷을 확인하세요', true); }
     write(conf);
     try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+    if (window.Sfx) Sfx.unlock();
     try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) {}
     try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
     $('setup').hidden = true;
@@ -153,8 +168,10 @@
   $('start').onclick = begin;
   $('test').onclick = async () => {
     try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) {}
+    if (window.Sfx) Sfx.unlock();
+    conf.station = $('station').value;
     $('setup').hidden = true;
-    await write_(linesFor(2));
+    await write_(linesFor(2), arriveHere() ? { fear: 2 } : null);
     $('setup').hidden = false;
   };
   document.addEventListener('visibilitychange', async () => { if (!document.hidden && navigator.wakeLock && $('setup').hidden) { try { wake = await navigator.wakeLock.request('screen'); } catch (e) {} } });

@@ -572,8 +572,11 @@
     };
     if (a.rec && a.rec.state !== 'inactive') { a.rec.onstop = finish; try { a.rec.stop(); } catch (e) { finish(); } } else finish();
   }
+  const boardArriveHere = () => !!(window.Intensity && station() && Intensity.boardArriveAt(cache.settings, station().id));
   function openStories(pages) {
     storyPages = pages.filter(Boolean);
+    // 칠판도착장소(과학실·6학년 교실): 도착하면 칠판이 몇 초 뒤 소리와 함께 켜져 글씨를 쓰고 꺼진다
+    if (boardArriveHere() && Intensity.boardOn(cache.settings, teamFear(cur.group))) sendCue('camera');   // 시트 스크립트가 아는 신호 이름 그대로
     const wait = startArrival();
     if (!storyPages.length) return openMission();
     storyIdx = 0; showStoryPage(wait);
@@ -794,7 +797,7 @@
     return playClip(n, vol) ? n : '';
   };
   function startStudentCamera() {
-    if (!window.Intensity || Intensity.boardOn(cache.settings, teamFear(cur.group))) sendCue('camera');   // 단계별 칠판 글씨 설정
+    if (!boardArriveHere() && (!window.Intensity || Intensity.boardOn(cache.settings, teamFear(cur.group)))) sendCue('camera');   // 단계별 칠판 글씨 설정 (도착 때 이미 쓴 장소는 빼고)
     const t = stType();
     openCamera(t === '스태킹' || t === '탁구공' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
   }
