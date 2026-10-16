@@ -39,10 +39,11 @@
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
     return h >>> 0;
   }
+  const lvOf = (g) => (g.fear == null ? (g.young ? 0 : 1) : g.fear);
   function excludedGroups() {
     const st = roster.settings || {};
     const ex = new Set(String(st['귀신제외조'] || '').split(/[,\s]+/).map(Number).filter(Boolean));
-    roster.groups.forEach((g) => { if (g.young || Intensity.ghostCount(roster.settings, g.fear) === 0) ex.add(g.group); });
+    roster.groups.forEach((g) => { if (Intensity.ghostCount(roster.settings, lvOf(g)) === 0) ex.add(g.group); });   // 1·2학년 조도 고른 단계를 따른다
     return ex;
   }
   /** 태블릿 앱과 같은 계산: 무서움 정도별 강도 설정의 귀신 장소 수 */
@@ -52,7 +53,7 @@
     const off = Intensity.offIds(st);
     const list = roster.stations.filter((s) => s.ghost && !off.includes(s.id)).map((s) => s.id).sort()
       .sort((a, b) => fnv1a(seed + ':' + g.group + ':' + a) - fnv1a(seed + ':' + g.group + ':' + b));
-    return list.slice(0, Intensity.ghostCount(st, g.fear));
+    return list.slice(0, Intensity.ghostCount(st, lvOf(g)));
   }
 
   // ---------- 불러오기 ----------
@@ -182,8 +183,8 @@
       const FEAR = ['😱', '😬', '😎'];
       const t = g.time ? new Date(g.time) : null;
       const when = t && !isNaN(t) ? `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')} 출발` : '';
-      const why = g.young ? '1·2학년' : Intensity.ghostCount(roster.settings, g.fear) === 0 ? '귀신 0곳' : '제외';
-      h += `<tr><td><b>${g.group}조</b> ${g.young ? '' : FEAR[g.fear == null ? 1 : g.fear]}${ex.has(g.group) ? `<br><span class="tag x">${why}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
+      const why = Intensity.ghostCount(roster.settings, lvOf(g)) === 0 ? '귀신 0곳' : '제외';
+      h += `<tr><td><b>${g.group}조</b> ${FEAR[lvOf(g)]}${g.young ? ' · 1·2학년' : ''}${ex.has(g.group) ? `<br><span class="tag x">${why}</span>` : ''}</td><td class="names">${g.size ? g.size + '명' : ''}<br>${when}</td>`;
       st.forEach((s) => {
         const mine = list.filter((r) => Number(r['조']) === g.group && r['장소id'] === s.id);
         const isReact = (r) => /_놀람/.test(String(r['파일명'] || ''));

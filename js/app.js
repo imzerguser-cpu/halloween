@@ -108,7 +108,7 @@
     // 시트가 기준. 단, 출발 장소 태블릿이 아직 못 올린 조는 지우지 않는다
     const pending = new Set((readLS(LS_CHECKINS) || []).map((c) => c.group));
     const next = {};
-    list.forEach((t) => { next[t.group] = { size: t.size, young: !!t.young, fear: t.fear == null ? 1 : t.fear, time: t.time }; });
+    list.forEach((t) => { next[t.group] = { size: t.size, young: !!t.young, fear: t.fear == null ? (t.young ? 0 : 1) : t.fear, time: t.time }; });
     Object.keys(teams).forEach((g) => { if (pending.has(Number(g)) && !next[g]) next[g] = teams[g]; });
     teams = next; saveTeams();
   }
@@ -165,13 +165,14 @@
    *  장소 수는 무서움 정도별 강도 설정(귀신수_너무/조금/안무서움). 장소는 귀신시드로 섞어 모든 태블릿이 같은 답을 낸다 */
   function ghostStationsFor(group) {
     const t = teams[group];
-    if (!t || t.young) return [];   // 1·2학년 있음 / 출발 기록을 모르는 조
+    if (!t) return [];   // 출발 기록을 모르는 조 (1·2학년이 있어도 조가 고른 무서움 단계를 따른다)
     if (setting('귀신제외조', '').split(/[,\s]+/).map(Number).includes(group)) return [];
     const seed = setting('귀신시드', '0');
     const list = ghostStations().sort((a, b) => fnv1a(seed + ':' + group + ':' + a) - fnv1a(seed + ':' + group + ':' + b));
     return list.slice(0, window.Intensity ? Intensity.ghostCount(cache.settings, t.fear) : 1);
   }
-  const teamFear = (group) => { const t = teams[group]; return !t || t.young ? null : t.fear == null ? 1 : t.fear; };
+  // 1·2학년이 있는 조도 출발할 때 고른 무서움 단계를 따른다 (사용자 요청 2026-10-16). 예전 기록(단계 없음)은 가장 순한 단계
+  const teamFear = (group) => { const t = teams[group]; return !t ? null : t.fear == null ? (t.young ? 0 : 1) : t.fear; };
 
   // ---------- 효과음: 조의 무서움 정도별 강도 설정을 따른다 ----------
   let spookTimer = null, loudTimer = null;
@@ -506,8 +507,7 @@
   function pickRosterTeam(t) {
     teamDraft = { fixed: t.group, size: t.size };
     $('teamAskRoster').hidden = true; $('teamAskSize').hidden = true;
-    if (t.young) return finishTeam(true, null);                               // 1·2학년이 있는 조: 질문 없이 (귀신·소리 없음)
-    answerYoung(false);
+    answerYoung(!!t.young);                                                   // 1·2학년이 있는 조도 무서움 단계를 직접 고른다
   }
   function pickSize(n) {
     teamDraft.size = n;
@@ -515,7 +515,8 @@
     $('teamAskSize').hidden = true; $('teamAskYoung').hidden = false;
   }
   function answerYoung(young) {
-    if (young || setting('무서움질문', '예') === '아니오') return finishTeam(young, young ? null : 1);
+    teamDraft.young = !!young;
+    if (setting('무서움질문', '예') === '아니오') return finishTeam(young, young ? 0 : 1);
     $('teamAskYoung').hidden = true; $('teamAskFear').hidden = false;
   }
   async function finishTeam(young, fear) {
@@ -529,7 +530,7 @@
     // 조 번호를 잠깐 보여 준 뒤 이야기 화면(프롤로그 → 이 장소 괴담) → 미션
     await sleep(2500);
     if ($('scrTeam').hidden) return;
-    const pro = prologueText(young ? 0 : fear);
+    const pro = prologueText(fear == null ? 0 : fear);
     openStories([pro ? { title: '오늘 밤의 이야기', text: pro } : null, stationStory(station())]);
   }
 
@@ -1292,7 +1293,7 @@
     recLimit = setTimeout(() => { if (recorder) { recorder.auto = true; finishVideo(); } }, limitMs);
   }
   /** 영상 미션(1학년 교실 컵 쌓기·6학년 교실 탁구공) 녹화 중 소리 2번: 4~7초에 은은한 소리, 그 8~12초 뒤 큰 소리.
-   *  조의 무서움 단계 표를 따른다(큰 소리 칸이 꺼진 단계는 은은한 소리 2번, 1·2학년 조는 소리 없음). */
+   *  조의 무서움 단계 표를 따른다(큰 소리 칸이 꺼진 단계는 은은한 소리 2번). */
   let recSpookTimers = [];
   function startRecSpooks() {
     stopRecSpooks();
@@ -1668,10 +1669,10 @@
     h += '<table class="t"><tr><th>조</th><th>인원</th><th>무서움</th><th>귀신 장소</th><th>비고</th></tr>';
     nums.forEach((g) => {
       const sts = ghostStationsFor(g), t = teams[g];
-      const f = t.young ? null : t.fear == null ? 1 : t.fear;
+      const f = t.fear == null ? (t.young ? 0 : 1) : t.fear;
       const sound = f != null && window.Intensity ? [Intensity.softOn(cache.settings, f) && '은은한 소리', Intensity.loudOn(cache.settings, f) && '큰 소리'].filter(Boolean).join('·') : '';
-      const note = t.young ? '1·2학년 있음 → 제외' : !sts.length && list.length ? (Intensity.ghostCount(cache.settings, f) === 0 ? '귀신 0곳 설정' : '귀신제외조') : sound;
-      h += `<tr><td>${g}조</td><td>${t.size ? t.size + '명' : ''}</td><td>${t.young ? '—' : FEAR[t.fear == null ? 1 : t.fear]}</td><td>${sts.length ? sts.map((x) => '👻 ' + nameOf(x)).join(', ') : '—'}</td><td>${note}</td></tr>`;
+      const note = (t.young ? '1·2학년 있음 · ' : '') + (!sts.length && list.length ? (Intensity.ghostCount(cache.settings, f) === 0 ? '귀신 0곳 설정' : '귀신제외조') : sound);
+      h += `<tr><td>${g}조</td><td>${t.size ? t.size + '명' : ''}</td><td>${FEAR[f]}</td><td>${sts.length ? sts.map((x) => '👻 ' + nameOf(x)).join(', ') : '—'}</td><td>${note}</td></tr>`;
     });
     $('ghostTable').innerHTML = h + '</table>';
   }
@@ -1828,7 +1829,7 @@
     document.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => pickSize(Number(b.dataset.size)); });
     $('btnYoungYes').onclick = () => answerYoung(true);
     $('btnYoungNo').onclick = () => answerYoung(false);
-    document.querySelectorAll('[data-fear]').forEach((b) => { b.onclick = () => finishTeam(false, Number(b.dataset.fear)); });
+    document.querySelectorAll('[data-fear]').forEach((b) => { b.onclick = () => finishTeam(!!teamDraft.young, Number(b.dataset.fear)); });
     $('btnResetTeams').onclick = resetTeams;
     document.querySelectorAll('input[name="camFacing"]').forEach((r) => { r.onchange = () => { conf.facing = r.value; writeLS(LS_CONF, conf); toast(r.value === 'user' ? '앞면 카메라로 찍어요' : '뒷면 카메라로 찍어요'); }; });
     $('chkScreenLight').onchange = (e) => { conf.screenLight = e.target.checked; writeLS(LS_CONF, conf); };
