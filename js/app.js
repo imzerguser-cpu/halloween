@@ -36,14 +36,14 @@
   function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
   // ---------- 화면 전환 ----------
-  const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrStory', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
+  const SCREENS = ['scrSetup', 'scrHome', 'scrTeam', 'scrArrive', 'scrStory', 'scrMission', 'scrCamera', 'scrSaving', 'scrResult', 'scrPin', 'scrAdmin'];
   function show(id) {
     SCREENS.forEach((s) => { $(s).hidden = s !== id; });
     const ab = $('btnAdminEnter'); if (ab) ab.hidden = !(id === 'scrHome' || id === 'scrSetup');   // 첫 화면에서만 보이는 교사 모드 버튼
     window.scrollTo(0, 0);
   }
   function goHome() {
-    stopNarration();
+    stopNarration(); stopSfx();
     setTimeout(runEdits, 1500);
     releaseHolds();
     cur = { group: null, lastId: null };
@@ -236,6 +236,13 @@
   }
   let clipCtx = null;
   const clipBufs = {};
+  // 지금 나는 효과음 — 이야기를 넘기면 끊는다 (사용자 요청 2026-10-16)
+  const liveSfx = new Set();
+  function stopSfx() {
+    liveSfx.forEach((x) => { try { if (x.stop) x.stop(); else x.pause(); } catch (e) {} });
+    liveSfx.clear();
+    if (window.Sfx && Sfx.stopAll) Sfx.stopAll();
+  }
   function playClip(name, vol, blobOverride) {
     const blob = blobOverride || sfxClips[name];
     if (!blob) return false;
@@ -255,7 +262,8 @@
         src.buffer = c.buf; g.gain.value = c.boost * vol;
         const comp = clipCtx.createDynamicsCompressor(); comp.threshold.value = -3; comp.ratio.value = 12;
         src.connect(g); g.connect(comp); comp.connect(clipCtx.destination); src.start();
-      } catch (e) { const a = new Audio(URL.createObjectURL(blob)); a.volume = vol; a.play().catch(() => {}); }
+        liveSfx.add(src); src.onended = () => liveSfx.delete(src);
+      } catch (e) { const a = new Audio(URL.createObjectURL(blob)); a.volume = vol; a.play().catch(() => {}); liveSfx.add(a); a.onended = () => liveSfx.delete(a); }
     })();
     return true;
   }
@@ -270,7 +278,7 @@
     try {
       if (ttsProvider()) {
         const clip = await ttsClip(text, fear === 2 ? 2 : 1);
-        if (clip && (stream || always)) { const a = new Audio(URL.createObjectURL(clip)); a.volume = loudVol(); a.play().catch(() => {}); return; }
+        if (clip && (stream || always)) { const a = new Audio(URL.createObjectURL(clip)); a.volume = loudVol(); a.play().catch(() => {}); liveSfx.add(a); a.onended = () => liveSfx.delete(a); return; }
       }
     } catch (e) {}
     if (!('speechSynthesis' in window) || !(stream || always)) return;
@@ -526,13 +534,13 @@
 
   // ---------- 이야기 화면 (전체 화면 + 나레이션) ----------
   let storyPages = [], storyIdx = 0;
-  // ---------- 도착 반응: 시작을 누르고 1~3초 뒤 소리 하나 → 카메라 화면 없이 연사 5장 + 영상 10초 ----------
+  // ---------- 도착 반응: 도착 확인을 누르고 1~2초 뒤 소리 하나 → 카메라 화면 없이 연사 5장 + 영상 10초 ----------
   let arrival = null, narrTimer = null;
   const arrivalOn = () => !!(window.Intensity && Intensity.arrivalOn(cache.settings, teamFear(cur.group)));
   function startArrival() {
     stopArrival();
     if (!arrivalOn() || !navigator.mediaDevices) return 0;
-    const delay = 1000 + Math.random() * 2000, fear = teamFear(cur.group), group = cur.group;
+    const delay = 1000 + Math.random() * 1000, fear = teamFear(cur.group), group = cur.group;
     const a = arrival = { stream: null, video: null, rec: null, chunks: [], frames: [], timers: [], mime: '', group, done: false };
     (async () => {
       try {
@@ -555,7 +563,7 @@
       }, 250 + i * 200));
       a.timers.push(setTimeout(() => stopArrival(), 10000));                 // 영상 10초
     }, delay));
-    return delay + 2500;                                                     // 나레이션은 소리 뒤에
+    return delay + 4500;                                                     // 이야기는 소리가 끝난 뒤에
   }
   function stopArrival() {
     const a = arrival; if (!a || a.done) return;
@@ -573,13 +581,29 @@
     if (a.rec && a.rec.state !== 'inactive') { a.rec.onstop = finish; try { a.rec.stop(); } catch (e) { finish(); } } else finish();
   }
   const boardArriveHere = () => !!(window.Intensity && station() && Intensity.boardArriveAt(cache.settings, station().id));
+  // 조를 고르면 먼저 도착 확인 화면 → 버튼을 누르면 1~2초 뒤 소리(+칠판) → 소리가 끝나면 이야기·나레이션 (사용자 요청 2026-10-16: 소리와 나레이션이 겹치지 않게)
+  let arriveTimer = null;
   function openStories(pages) {
     storyPages = pages.filter(Boolean);
-    // 칠판도착장소(과학실·6학년 교실): 도착하면 칠판이 몇 초 뒤 소리와 함께 켜져 글씨를 쓰고 꺼진다
+    clearTimeout(arriveTimer); stopArrival();
+    const s = station();
+    $('arriveGroup').textContent = cur.group + '조';
+    $('arrivePlace').textContent = '📍 ' + (s ? s.name : '도착!');
+    $('arriveLead').textContent = '모두 다 모였나요? 다 모이면 버튼을 눌러요.';
+    $('arriveBtns').hidden = false;
+    show('scrArrive');
+  }
+  function confirmArrival() {
+    $('arriveBtns').hidden = true;
+    $('arriveLead').textContent = '쉿… 귀를 기울여 보세요…';
+    // 칠판도착장소(과학실·6학년 교실): 칠판이 몇 초 뒤 소리와 함께 켜져 글씨를 쓰고 꺼진다
     if (boardArriveHere() && Intensity.boardOn(cache.settings, teamFear(cur.group))) sendCue('camera');   // 시트 스크립트가 아는 신호 이름 그대로
     const wait = startArrival();
-    if (!storyPages.length) return openMission();
-    storyIdx = 0; showStoryPage(wait);
+    arriveTimer = setTimeout(() => {
+      if ($('scrArrive').hidden) return;
+      if (!storyPages.length) return openMission();
+      storyIdx = 0; showStoryPage();
+    }, wait);
   }
   function showStoryPage(narrDelay) {
     const pg = storyPages[storyIdx];
@@ -594,7 +618,7 @@
     else narrate(pg.text);
   }
   function nextStory() {
-    stopNarration();
+    stopNarration(); stopSfx();
     if (storyIdx < storyPages.length - 1) { storyIdx++; showStoryPage(); } else openMission();
   }
 
@@ -696,7 +720,7 @@
     setTimeout(() => { try { if (s.speaking) s.cancel(); } catch (e) {} }, 300);
   }
   function stopNarration() {
-    narrToken++;
+    narrToken++; clearTimeout(narrTimer);
     hushSpeech();
     if (narrAudio) { try { narrAudio.pause(); URL.revokeObjectURL(narrAudio.src); } catch (e) {} narrAudio = null; }
   }
@@ -1731,6 +1755,7 @@
     $('btnSetupAdmin').onclick = openPin;
     $('btnTeamStart').onclick = () => openTeamSetup();
     $('btnTeamGo').onclick = () => openMission();
+    $('btnArrive').onclick = confirmArrival;
     $('btnStoryNext').onclick = nextStory;
     $('btnStoryReplay').onclick = () => narrate(storyPages[storyIdx] && storyPages[storyIdx].text);
     document.querySelectorAll('#selVoice, .sel-voice-lv').forEach((sel) => {

@@ -70,7 +70,7 @@
     freeGhost: (st) => yes(get(st, '자유배치')),
     /** 칠판 글씨가 나오는 장소(칠판장소)에서 카메라를 켜면 학생 반응을 영상으로 */
     boardRecAt: (st, id) => yes(get(st, '칠판녹화')) && String(get(st, '칠판장소') || '').split(/[,\s]+/).includes(id),
-    /** 도착하면 칠판 글씨가 나오는 장소(칠판도착장소): 조 번호를 누르고 몇 초 뒤 소리와 함께 칠판이 켜졌다 꺼진다. 나머지 장소는 카메라를 켤 때 */
+    /** 도착하면 칠판 글씨가 나오는 장소(칠판도착장소): 도착 확인을 누르고 몇 초 뒤 소리와 함께 칠판이 켜졌다 꺼진다. 나머지 장소는 카메라를 켤 때 */
     boardArriveAt: (st, id) => String(get(st, '칠판도착장소') || '').split(/[,\s]+/).includes(id),
     /** 귀신이 나온 순간 학생 반응 찍기: 끔 · 연사(5장) · 영상 · 둘다 */
     reactMode: (st) => (['끔', '연사', '영상', '둘다'].includes(get(st, '놀람촬영')) ? get(st, '놀람촬영') : '둘다'),
@@ -112,7 +112,7 @@
   <table class="int-t"><tr><th>출발할 때 고른 답</th><th>귀신 나오는 장소</th><th>은은한 소리</th><th>큰 소리</th><th>깜짝 얼굴 (+큰 소리)</th><th>칠판 글씨</th><th>도착 소리 (+반응 촬영)</th></tr>
   ${LEVELS.map((l) => `<tr><td>${l.label}</td><td>${sel('귀신수_' + l.key)}</td><td>${chk('은은한소리_' + l.key)}</td><td>${chk('큰소리_' + l.key)}</td><td>${chk('깜짝얼굴_' + l.key)}</td><td>${chk('칠판글씨_' + l.key)}</td><td>${chk('도착소리_' + l.key)}</td></tr>`).join('')}
   </table>
-  <p class="int-help">1·2학년이 있는 조(명단 학년 또는 출발 질문)는 위 설정과 관계없이 귀신·소리가 없습니다.<br>• <b>도착 소리</b>: 장소에서 시작을 누르고 1~3초 뒤 소리 하나(큰 소리 칸이 켜져 있으면 큰 소리, 아니면 은은한 소리) + 반응 몰래 촬영(연사 5장·영상 10초).<br>• <b>귀신 나오는 장소</b>: 인증샷 카운트다운 중 화면에만 귀신이 1초쯤(소리 없음). <b>깜짝 얼굴</b>을 켠 단계는 귀신 뒤 큰 얼굴 + 여자 비명.<br>• <b>칠판 글씨</b>: 1학년 교실 전자칠판 분필 글씨.</p>
+  <p class="int-help">1·2학년이 있는 조(명단 학년 또는 출발 질문)는 위 설정과 관계없이 귀신·소리가 없습니다.<br>• <b>도착 소리</b>: 장소에서 도착 확인을 누르고 1~2초 뒤 소리 하나(소리가 끝나면 이야기)(큰 소리 칸이 켜져 있으면 큰 소리, 아니면 은은한 소리) + 반응 몰래 촬영(연사 5장·영상 10초).<br>• <b>귀신 나오는 장소</b>: 인증샷 카운트다운 중 화면에만 귀신이 1초쯤(소리 없음). <b>깜짝 얼굴</b>을 켠 단계는 귀신 뒤 큰 얼굴 + 여자 비명.<br>• <b>칠판 글씨</b>: 1학년 교실 전자칠판 분필 글씨.</p>
   ${rng('효과음크기', '은은한 소리 크기', 'soft')}
   ${rng('큰소리크기', '큰 소리 크기', 'loud')}
   <div class="int-row int-sfx"><span>은은한 소리 하나씩 듣기</span>
@@ -135,7 +135,7 @@
   <div class="int-row"><span>도착하면 칠판 글씨</span>
     <label class="int-chk">장소 id <input type="text" data-k="칠판도착장소" value="${esc(get(st, '칠판도착장소'))}" style="width:160px;padding:6px 8px;border-radius:7px;border:1px solid #3a3f50;background:#0f1116;color:#fff"></label>
   </div>
-  <p class="int-help">여기 적은 장소(쉼표로 구분, 기본 science,class6)는 조 번호를 누르고 몇 초 뒤 전자칠판이 소리와 함께 켜져 글씨를 쓰고 다시 꺼집니다. 적지 않은 장소(예: class1)는 지금처럼 인증샷 카메라를 켤 때 글씨가 나옵니다. 칠판마다 board.html 에서 그 장소를 골라 두세요.</p>
+  <p class="int-help">여기 적은 장소(쉼표로 구분, 기본 science,class6)는 도착 확인을 누르고 몇 초 뒤 전자칠판이 소리와 함께 켜져 글씨를 쓰고 다시 꺼집니다. 적지 않은 장소(예: class1)는 지금처럼 인증샷 카메라를 켤 때 글씨가 나옵니다. 칠판마다 board.html 에서 그 장소를 골라 두세요.</p>
   <h3 class="int-h">🔊 이야기 나레이션</h3>
   <div class="int-row"><span>이야기 읽어 주기</span>
     <label class="int-chk"><input type="checkbox" data-k="나레이션"${yes(get(st, '나레이션')) ? ' checked' : ''}> 나레이션 켜기</label>

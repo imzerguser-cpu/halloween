@@ -18,9 +18,12 @@
     return b;
   }
   // 큰 소리도 찢어지지 않게 압축기를 거친다
+  const live = new Set();   // 지금 나는 소리 (stopAll 로 끊는다)
   function out(c, vol) {
     const comp = c.createDynamicsCompressor(); comp.threshold.value = -6; comp.ratio.value = 8; comp.connect(c.destination);
-    const g = c.createGain(); g.gain.value = vol; g.connect(comp); return g;
+    const g = c.createGain(); g.gain.value = vol; g.connect(comp);
+    live.add(comp); setTimeout(() => live.delete(comp), 8000);
+    return g;
   }
 
   // 나무 문 두드리는 소리 (똑똑똑 … 똑똑)
@@ -172,6 +175,8 @@
 
   window.Sfx = {
     unlock() { try { ac(); } catch (e) {} },
+    /** 나고 있는 소리를 모두 끊는다 */
+    stopAll() { live.forEach((n) => { try { n.disconnect(); } catch (e) {} }); live.clear(); },
     names: Object.keys(SOUNDS),
     loudNames: Object.keys(LOUD),
     /** 은은한 소리. name 이 없으면 무작위. vol 0~1 */

@@ -433,6 +433,19 @@ button{touch-action:manipulation}
   </div>
 </section>
 
+<!-- 도착 확인: 누르면 1~2초 뒤 소리 → 소리가 끝나면 이야기 -->
+<section class="screen" id="scrArrive" hidden>
+  <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="arriveGroup"></div></header>
+  <div class="wrap" style="display:flex;flex-direction:column;justify-content:center">
+    <h2 class="big-title" id="arrivePlace">📍 도착!</h2>
+    <p class="lead" id="arriveLead">모두 다 모였나요? 다 모이면 버튼을 눌러요.</p>
+    <div class="row center" id="arriveBtns">
+      <button class="btn ghost" data-go="home">처음으로</button>
+      <button class="btn big-go" id="btnArrive">✅ 도착 확인</button>
+    </div>
+  </div>
+</section>
+
 <!-- 미션 -->
 <section class="screen" id="scrMission" hidden>
   <header class="hd"><div class="hd-title" data-admin-tap>🎃 할로윈 탐험대</div><div class="hd-sub" id="misGroup"></div></header>
@@ -659,13 +672,13 @@ button{touch-action:manipulation}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/jszip/jszip.min.js" defer></script>
-<script src="js/ghost-engine.js?v=20261016090739" defer></script>
-<script src="js/ghost-free.js?v=20261016090739" defer></script>
-<script src="js/sfx.js?v=20261016090739" defer></script>
-<script src="js/intensity.js?v=20261016090739" defer></script>
-<script src="js/stories.js?v=20261016090739" defer></script>
-<script src="js/tour.js?v=20261016090739" defer></script>
-<script src="js/story-editor.js?v=20261016090739" defer></script>
-<script src="js/app.js?v=20261016090739" defer></script>
+<script src="js/ghost-engine.js?v=20261016095653" defer></script>
+<script src="js/ghost-free.js?v=20261016095653" defer></script>
+<script src="js/sfx.js?v=20261016095653" defer></script>
+<script src="js/intensity.js?v=20261016095653" defer></script>
+<script src="js/stories.js?v=20261016095653" defer></script>
+<script src="js/tour.js?v=20261016095653" defer></script>
+<script src="js/story-editor.js?v=20261016095653" defer></script>
+<script src="js/app.js?v=20261016095653" defer></script>
 </body>
 </html>
