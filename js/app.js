@@ -43,7 +43,8 @@
     window.scrollTo(0, 0);
   }
   function goHome() {
-    stopNarration(); stopSfx(); if (recNow) stopRec();
+    stopNarration(); stopSfx(); if (narrPreview) narrPreview.pause();
+    setTimeout(() => prefetchNarr().catch(() => {}), 3000);
     setTimeout(runEdits, 1500);
     releaseHolds();
     cur = { group: null, lastId: null };
@@ -691,7 +692,7 @@
     stopNarration();
     const token = ++narrToken;
     const lv0 = opts && opts.level != null ? opts.level : storyLevel();
-    const mine = await ttsDb.get(recKey(text)).catch(() => null);            // 선생님이 녹음해 둔 소리가 있으면 그것을 튼다
+    const mine = await narrFile(text).catch(() => null);                     // 컴퓨터로 미리 만든 나레이션이 있으면 그것을 튼다
     if (token !== narrToken) return;
     if (mine) { narrAudio = new Audio(URL.createObjectURL(mine)); narrAudio.play().catch(() => {}); return; }
     if (ttsProvider()) {
@@ -722,11 +723,22 @@
     setTimeout(() => { try { s.cancel(); s.resume(); } catch (e) {} }, 60);
     setTimeout(() => { try { if (s.speaking) s.cancel(); } catch (e) {} }, 300);
   }
-  // ---------- 나레이션 녹음: 이 장소에서 읽을 이야기를 선생님 목소리로 녹음해 두면 그 소리를 튼다 (사용자 요청 2026-10-16: 태블릿 음성이 안 읽혀서) ----------
-  const recKey = (text) => 'rec|' + String(text || '').trim();
+  // ---------- 컴퓨터로 미리 만든 나레이션 (사용자 요청 2026-10-16: 태블릿 음성이 이야기를 못 읽어서) ----------
+  // scripts/make-narration.py 가 이야기마다 narration/<fnv1a(글)>.mp3 를 만들어 둔다. 받은 파일은 태블릿에도 저장(인터넷 끊겨도 재생)
+  const narrKey = (text) => fnv1a(cleanSpeech(text)).toString(16);
+  let narrIndex = null;
+  const narrList = () => narrIndex || (narrIndex = fetch('narration/index.json', { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.json() : [])).then((a) => new Set(a)).catch(() => { narrIndex = null; return new Set(); }));
+  async function narrFile(text) {
+    const key = narrKey(text), k = 'narr|' + key;
+    let blob = await ttsDb.get(k).catch(() => null);
+    if (blob) return blob;
+    if (!(await narrList()).has(key)) return null;
+    try { const r = await fetch('narration/' + key + '.mp3'); if (r.ok) { blob = await r.blob(); await ttsDb.put(k, blob).catch(() => {}); } } catch (e) {}
+    return blob || null;
+  }
   const REC_LV = ['😱 너무 무서워요 · 1·2학년', '😬 조금 무서워요', '😎 하나도 안 무서워요'];
-  let recNow = null, recPlay = null;
-  function recTexts() {
+  function narrTexts() {
     const s = station(); if (!s) return [];
     const out = [];
     const add = (label, text) => {
@@ -738,61 +750,28 @@
     [0, 1, 2].forEach((lv) => { const st = stationStory(s, lv); if (st) add(s.name + ' 이야기 · ' + REC_LV[lv], st.text); });
     return out;
   }
-  function pickAudioMime() {
-    if (!window.MediaRecorder) return null;
-    for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']) if (MediaRecorder.isTypeSupported(m)) return m;
-    return '';
-  }
-  async function renderRecs() {
+  /** 이 장소에서 읽을 나레이션을 미리 받아 둔다 */
+  const prefetchNarr = () => Promise.all(narrTexts().map((it) => narrFile(it.text).catch(() => null)));
+  let narrPreview = null;
+  async function renderNarrStatus() {
     const box = $('recList'); if (!box) return;
-    const list = recTexts();
+    const list = narrTexts();
     if (!list.length) { box.innerHTML = '<p class="help">먼저 연결·장소 탭에서 이 태블릿의 장소를 고르세요.</p>'; return; }
-    const has = await Promise.all(list.map((it) => ttsDb.get(recKey(it.text)).catch(() => null)));
+    box.innerHTML = '<p class="help">확인하는 중...</p>';
+    const files = await Promise.all(list.map((it) => narrFile(it.text).catch(() => null)));
     box.innerHTML = '';
     list.forEach((it, i) => {
-      const key = recKey(it.text), on = !!(recNow && recNow.key === key);
       const d = document.createElement('div');
       d.style.cssText = 'border-top:1px solid #2e3240;padding:12px 0';
-      d.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${esc(it.label)} ${has[i] ? '✅ 녹음됨' : '⚪ 아직 없음'}</div>
+      d.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${esc(it.label)} ${files[i] ? '✅ 준비됨' : '❌ 없음 (이야기 글을 고쳤다면 컴퓨터에서 다시 만들어야 해요)'}</div>
         <div class="help" style="white-space:pre-wrap;margin-bottom:8px">${esc(it.text)}</div>
-        <div class="row"><button class="btn sm${on ? ' danger' : ''}" data-a="rec">${on ? '■ 멈추고 저장' : '🎙 녹음'}</button>
-        <button class="btn sm ghost" data-a="play"${has[i] ? '' : ' disabled'}>▶ 듣기</button>
-        <button class="btn sm ghost" data-a="del"${has[i] ? '' : ' disabled'}>🗑 지우기</button></div>`;
-      d.querySelector('[data-a=rec]').onclick = () => (on ? stopRec() : startRec(key));
-      d.querySelector('[data-a=play]').onclick = () => {
-        if (recPlay) recPlay.pause();
-        recPlay = new Audio(URL.createObjectURL(has[i])); recPlay.play().catch(() => {});
-      };
-      d.querySelector('[data-a=del]').onclick = async () => {
-        if (!confirm('이 녹음을 지울까요?')) return;
-        await ttsDb.put(key, null); renderRecs();
+        <button class="btn sm ghost"${files[i] ? '' : ' disabled'}>▶ 듣기</button>`;
+      d.querySelector('button').onclick = () => {
+        if (narrPreview) narrPreview.pause();
+        narrPreview = new Audio(URL.createObjectURL(files[i])); narrPreview.play().catch(() => {});
       };
       box.appendChild(d);
     });
-  }
-  async function startRec(key) {
-    if (recNow) await stopRec();
-    const mime = pickAudioMime();
-    if (mime === null) return toast('이 기기에서는 녹음이 안 돼요', 5000);
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch (e) { return toast('마이크를 쓸 수 없어요: ' + e.message, 5000); }
-    const chunks = [], mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    const done = new Promise((res) => { mr.onstop = res; });
-    recNow = { key, mr, stream, chunks, done, type: mr.mimeType || mime || 'audio/webm' };
-    mr.start(500);
-    renderRecs();
-    toast('🎙 녹음 중… 다 읽으면 "■ 멈추고 저장"을 눌러요', 4000);
-  }
-  async function stopRec() {
-    const r = recNow; if (!r) return;
-    recNow = null;
-    try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) {}
-    await r.done;
-    r.stream.getTracks().forEach((t) => t.stop());
-    if (r.chunks.length) { await ttsDb.put(r.key, new Blob(r.chunks, { type: r.type.split(';')[0] })); toast('녹음을 저장했어요'); }
-    renderRecs();
   }
   function stopNarration() {
     narrToken++; clearTimeout(narrTimer);
@@ -1608,8 +1587,7 @@
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
-    if (name !== 'tools' && recNow) stopRec();
-    if (name === 'tools') { renderRecs(); renderDiag(); renderCamSettings(); renderVoices(); $('btnVoicePrefetch').hidden = !ttsProvider(); }
+    if (name === 'tools') { renderNarrStatus(); renderDiag(); renderCamSettings(); renderVoices(); $('btnVoicePrefetch').hidden = !ttsProvider(); }
     if (name === 'level') renderIntensity();
     if (name === 'story') renderStoryEditor();
   }
