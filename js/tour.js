@@ -16,8 +16,8 @@
       label: '마동 코스 5곳 (1학년 교실 큰 컵 쌓기 → 과학실 해골 → 중앙현관 계단 → 도서관 책 찾기 → 6학년 교실 앞 탁구공 → 창고 앞)',
       prologue: 'prologueCourse',
       places: [
-        { id: 'class1', name: '1학년 교실', kind: 'mission', story: 'course',
-          mission: '큰 컵 쌓기! 다 함께 큰 컵으로 탑을 쌓아요. 탑을 다 쌓았으면 탑 옆에 모여 📸 버튼을 눌러요. 5초 뒤에 찰칵!',
+        { id: 'class1', name: '1학년 교실', kind: 'mission', story: 'course', shoot: '영상',
+          mission: '큰 컵 쌓기! 🎬 버튼을 누르면 3초 뒤에 녹화가 시작돼요. 다 함께 큰 컵으로 탑을 쌓고, 다 쌓으면 ■ 버튼을 눌러 녹화를 끝내요!',
           clue: '다음은 과학실로! 해골이 기다리고 있어요.' },
         { id: 'science', name: '과학실', kind: 'photo', story: 'course',
           mission: '해골 모형 옆에 다 함께 모여 인증샷! ' + SHOT,
@@ -25,8 +25,8 @@
         { id: 'library', name: '도서관', kind: 'mission', story: 'type:책찾기',
           mission: '도서관 어딘가에 있는 {책}을 찾아요! 찾으면 책을 들고 다 함께 모여 📸 버튼을 눌러요. 5초 뒤에 찰칵!',
           clue: '다음은 6학년 교실 앞으로!' },
-        { id: 'class6', name: '6학년 교실 앞', kind: 'mission', story: 'course',
-          mission: '컵에 탁구공 넣기! 탁구공을 던져 컵에 3개를 넣으면 성공! 성공하면 컵 앞에 모여 📸 버튼을 눌러요. 5초 뒤에 찰칵!',
+        { id: 'class6', name: '6학년 교실 앞', kind: 'mission', story: 'course', shoot: '영상',
+          mission: '컵에 탁구공 넣기! 🎬 버튼을 누르면 3초 뒤에 녹화가 시작돼요. 탁구공을 던져 컵에 3개를 넣으면 성공! 다 넣으면 ■ 버튼을 눌러 녹화를 끝내요!',
           clue: '다음은 운동장 창고 앞으로! 밖은 어두우니 손전등을 켜고 천천히.' },
         { id: 'storage', name: '창고 앞', kind: 'photo', story: 'id',
           mission: '창고 앞에 다 함께 모여 인증샷! ' + SHOT,
@@ -100,7 +100,8 @@
           ghost: r.ghost != null ? !!r.ghost : true,
           reveal: r.reveal || '', clue: p.clue,
           storyTitle: r.storyTitle || '', stories: r.stories || ['', '', ''],
-          tour: true, kind: p.kind || 'photo', storyFrom: p.story || 'id'
+          tour: true, kind: p.kind || 'photo', storyFrom: p.story || 'id',
+          shoot: modeOf(settings) === '코스' ? p.shoot || '' : ''   // 마동 코스의 1·6학년 교실은 영상 미션
         };
       });
     }

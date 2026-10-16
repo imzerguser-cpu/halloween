@@ -43,7 +43,7 @@
     window.scrollTo(0, 0);
   }
   function goHome() {
-    stopNarration(); stopSfx();
+    stopNarration(); stopSfx(); if (recNow) stopRec();
     setTimeout(runEdits, 1500);
     releaseHolds();
     cur = { group: null, lastId: null };
@@ -691,6 +691,9 @@
     stopNarration();
     const token = ++narrToken;
     const lv0 = opts && opts.level != null ? opts.level : storyLevel();
+    const mine = await ttsDb.get(recKey(text)).catch(() => null);            // 선생님이 녹음해 둔 소리가 있으면 그것을 튼다
+    if (token !== narrToken) return;
+    if (mine) { narrAudio = new Audio(URL.createObjectURL(mine)); narrAudio.play().catch(() => {}); return; }
     if (ttsProvider()) {
       try {
         const clip = await ttsClip(cleanSpeech(text), lv0);
@@ -719,6 +722,78 @@
     setTimeout(() => { try { s.cancel(); s.resume(); } catch (e) {} }, 60);
     setTimeout(() => { try { if (s.speaking) s.cancel(); } catch (e) {} }, 300);
   }
+  // ---------- 나레이션 녹음: 이 장소에서 읽을 이야기를 선생님 목소리로 녹음해 두면 그 소리를 튼다 (사용자 요청 2026-10-16: 태블릿 음성이 안 읽혀서) ----------
+  const recKey = (text) => 'rec|' + String(text || '').trim();
+  const REC_LV = ['😱 너무 무서워요 · 1·2학년', '😬 조금 무서워요', '😎 하나도 안 무서워요'];
+  let recNow = null, recPlay = null;
+  function recTexts() {
+    const s = station(); if (!s) return [];
+    const out = [];
+    const add = (label, text) => {
+      if (!text) return;
+      const o = out.find((x) => x.text === text);
+      if (o) o.label += ' / ' + label; else out.push({ label, text });
+    };
+    if (isStartStation()) [0, 1, 2].forEach((lv) => add('오늘 밤의 이야기 · ' + REC_LV[lv], prologueText(lv)));
+    [0, 1, 2].forEach((lv) => { const st = stationStory(s, lv); if (st) add(s.name + ' 이야기 · ' + REC_LV[lv], st.text); });
+    return out;
+  }
+  function pickAudioMime() {
+    if (!window.MediaRecorder) return null;
+    for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']) if (MediaRecorder.isTypeSupported(m)) return m;
+    return '';
+  }
+  async function renderRecs() {
+    const box = $('recList'); if (!box) return;
+    const list = recTexts();
+    if (!list.length) { box.innerHTML = '<p class="help">먼저 연결·장소 탭에서 이 태블릿의 장소를 고르세요.</p>'; return; }
+    const has = await Promise.all(list.map((it) => ttsDb.get(recKey(it.text)).catch(() => null)));
+    box.innerHTML = '';
+    list.forEach((it, i) => {
+      const key = recKey(it.text), on = !!(recNow && recNow.key === key);
+      const d = document.createElement('div');
+      d.style.cssText = 'border-top:1px solid #2e3240;padding:12px 0';
+      d.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${esc(it.label)} ${has[i] ? '✅ 녹음됨' : '⚪ 아직 없음'}</div>
+        <div class="help" style="white-space:pre-wrap;margin-bottom:8px">${esc(it.text)}</div>
+        <div class="row"><button class="btn sm${on ? ' danger' : ''}" data-a="rec">${on ? '■ 멈추고 저장' : '🎙 녹음'}</button>
+        <button class="btn sm ghost" data-a="play"${has[i] ? '' : ' disabled'}>▶ 듣기</button>
+        <button class="btn sm ghost" data-a="del"${has[i] ? '' : ' disabled'}>🗑 지우기</button></div>`;
+      d.querySelector('[data-a=rec]').onclick = () => (on ? stopRec() : startRec(key));
+      d.querySelector('[data-a=play]').onclick = () => {
+        if (recPlay) recPlay.pause();
+        recPlay = new Audio(URL.createObjectURL(has[i])); recPlay.play().catch(() => {});
+      };
+      d.querySelector('[data-a=del]').onclick = async () => {
+        if (!confirm('이 녹음을 지울까요?')) return;
+        await ttsDb.put(key, null); renderRecs();
+      };
+      box.appendChild(d);
+    });
+  }
+  async function startRec(key) {
+    if (recNow) await stopRec();
+    const mime = pickAudioMime();
+    if (mime === null) return toast('이 기기에서는 녹음이 안 돼요', 5000);
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch (e) { return toast('마이크를 쓸 수 없어요: ' + e.message, 5000); }
+    const chunks = [], mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise((res) => { mr.onstop = res; });
+    recNow = { key, mr, stream, chunks, done, type: mr.mimeType || mime || 'audio/webm' };
+    mr.start(500);
+    renderRecs();
+    toast('🎙 녹음 중… 다 읽으면 "■ 멈추고 저장"을 눌러요', 4000);
+  }
+  async function stopRec() {
+    const r = recNow; if (!r) return;
+    recNow = null;
+    try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) {}
+    await r.done;
+    r.stream.getTracks().forEach((t) => t.stop());
+    if (r.chunks.length) { await ttsDb.put(r.key, new Blob(r.chunks, { type: r.type.split(';')[0] })); toast('녹음을 저장했어요'); }
+    renderRecs();
+  }
   function stopNarration() {
     narrToken++; clearTimeout(narrTimer);
     hushSpeech();
@@ -746,8 +821,8 @@
     return custom || ((list && list[lv]) || '');
   }
   const storyDef = (s) => (window.HG_STORIES && HG_STORIES.defFor ? HG_STORIES.defFor(s) : null);
-  function stationStory(s) {
-    const lv = storyLevel(), def = storyDef(s);
+  function stationStory(s, level) {
+    const lv = level != null ? level : storyLevel(), def = storyDef(s);
     const title = (s.storyTitle || '').trim() || (def ? def.title : '');
     const custom = s.stories && s.stories[lv];
     const text = (custom || '').trim() || (def ? def.text[lv] : '');
@@ -759,6 +834,7 @@
     '사진': { btn: '📸 사진 찍으러 가기', lead: '미션을 성공한 순간을 사진으로 남겨요!' },
     '스태킹': { btn: '🎬 영상 찍으러 가기', lead: '시작을 누르면 시간이 흘러요. 다 쌓고 내리면 "끝!"을 눌러요!' },
     '탁구공': { btn: '🎬 영상 찍으러 가기', lead: '공을 던지는 모습을 영상으로 남겨요!' },
+    '영상': { btn: '🎬 영상 찍으러 가기', lead: '버튼을 누르면 3초 뒤에 녹화가 시작돼요. 미션을 끝내면 ■ 버튼을 눌러요!' },
     '책찾기': { btn: '🔍 찾은 책 바코드 찍기', lead: '책을 찾으면 바코드를 찍어 확인해요!' },
     '연속사진': { btn: '📸 인증사진 찍으러 가기', lead: '버튼을 누르고 10초 안에 자리를 잡아요! 사진을 몇 장 연달아 찍어요.' }
   };
@@ -766,6 +842,7 @@
   const isMissionPlace = (s) => !tourOn() || (s && s.kind === 'mission');   // 코스의 미션 장소 / 예전 미션 방식
   const photoOnly = () => !!(window.Intensity && Intensity.photoOnly(cache.settings));
   const stType = () => {
+    if (station().shoot === '영상') return '영상';                              // 마동 코스의 1·6학년 교실 (사용자 요청 2026-10-16)
     const t = String(station().type || '사진').trim();
     if (photoOnly() && t !== '책찾기') return '사진';   // 모든 장소 사진 인증샷 (책찾기는 바코드 확인 뒤 사진)
     return TYPE[t] ? t : '사진';
@@ -802,8 +879,8 @@
     $('misText').textContent = s.mission || '미션 성공 장면을 사진으로 찍어요!';
     showPlaceImg($('misPlace'), s.id, $('misPlaceFig'));
     $('misGroup').textContent = cur.group + '조';
-    $('misLead').textContent = tourOn() ? (isMissionPlace(s) ? '미션을 성공하면 모두 화면에 들어오게 모여 버튼을 눌러요. 5초 뒤에 찰칵!' : '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!') : TYPE[t].lead;
-    $('btnOpenCam').textContent = tourOn() ? '📸 인증샷 찍으러 가기' : TYPE[t].btn;
+    $('misLead').textContent = t === '영상' ? TYPE[t].lead : tourOn() ? (isMissionPlace(s) ? '미션을 성공하면 모두 화면에 들어오게 모여 버튼을 눌러요. 5초 뒤에 찰칵!' : '모두 화면에 들어오게 모인 뒤 버튼을 눌러요. 5초 뒤에 찰칵!') : TYPE[t].lead;
+    $('btnOpenCam').textContent = t === '영상' || !tourOn() ? TYPE[t].btn : '📸 인증샷 찍으러 가기';
     show('scrMission');
   }
   // 칠판 신호: 이 장소의 전자칠판(board.html)이 분필 글씨를 쓰게 한다 (기다리지 않음)
@@ -823,7 +900,7 @@
   function startStudentCamera() {
     if (!boardArriveHere() && (!window.Intensity || Intensity.boardOn(cache.settings, teamFear(cur.group)))) sendCue('camera');   // 단계별 칠판 글씨 설정 (도착 때 이미 쓴 장소는 빼고)
     const t = stType();
-    openCamera(t === '스태킹' || t === '탁구공' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
+    openCamera(t === '스태킹' || t === '탁구공' || t === '영상' ? 'video' : t === '책찾기' ? 'scan' : t === '연속사진' ? 'burst' : 'student');
   }
 
   // ---------- 카메라 ----------
@@ -1204,7 +1281,7 @@
     const mime = pickVideoMime();
     if (!mime) { shooting = false; return toast('이 기기에서는 영상 녹화가 안 돼요', 5000); }
     const t = stType();
-    const limitMs = t === '스태킹' ? stValue(60) * 1000 : 60000;
+    const limitMs = t === '스태킹' ? stValue(60) * 1000 : t === '영상' ? 120000 : 60000;   // 영상 미션은 최대 2분
     $('btnShutter').hidden = true; $('btnCamCancel').hidden = true;
     await countdown(3);
     if (wantGhostHere() && ghostOnScreen() && window.GhostFree) {
@@ -1531,7 +1608,8 @@
     document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name; });
     if (name === 'ghost') renderGhostTable();
     if (name === 'gallery') renderGallery();
-    if (name === 'tools') { renderDiag(); renderCamSettings(); renderVoices(); $('btnVoicePrefetch').hidden = !ttsProvider(); }
+    if (name !== 'tools' && recNow) stopRec();
+    if (name === 'tools') { renderRecs(); renderDiag(); renderCamSettings(); renderVoices(); $('btnVoicePrefetch').hidden = !ttsProvider(); }
     if (name === 'level') renderIntensity();
     if (name === 'story') renderStoryEditor();
   }
