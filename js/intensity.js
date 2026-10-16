@@ -100,7 +100,7 @@
       const rest = HG_TOUR.catalog(rawStations || []).filter((p) => !curIds.includes(p.id));
       const row = (p, on) => `<li class="int-crow" data-cid="${esc(p.id)}"><label class="int-chk"><input type="checkbox" class="int-cuse"${on ? ' checked' : ''}> ${esc(p.name)} <small style="color:#8c91a3">(${esc(p.id)})</small></label><button type="button" class="int-cup">▲</button><button type="button" class="int-cdown">▼</button></li>`;
       return `<div class="int-row"><span>마동 코스 장소</span><div style="flex:1;min-width:260px"><ol class="int-course">${cur.map((p) => row(p, true)).join('')}${rest.map((p) => row(p, false)).join('')}</ol>
-        <button type="button" class="int-cdefault">↩ 기본 코스(5곳)로</button></div></div>
+        <button type="button" class="int-cdefault">↩ 기본 코스(4곳)로</button></div></div>
       <p class="int-help">체크한 장소를 위에서부터 순서대로 돕니다. ▲▼로 순서를 바꾸고, 체크를 켜면 추가·끄면 삭제돼요. 시트에 없는 장소도 넣을 수 있어요. 💾 저장 후 태블릿마다 장소를 다시 골라 주세요.</p>`;
     })() : ''}
   ${stations && stations.length && !(window.HG_TOUR && HG_TOUR.modeOf(st) === '코스') ? `<div class="int-row int-use"><span>이번에 쓰는 장소</span>
