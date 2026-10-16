@@ -1208,24 +1208,20 @@
     }, 100);
     recLimit = setTimeout(() => { if (recorder) { recorder.auto = true; finishVideo(); } }, limitMs);
   }
-  /** 영상 미션(1학년 교실 컵 쌓기·6학년 교실 탁구공) 녹화 중: 은은한 소리를 6~11초마다, 큰 소리는 세 번에 한 번꼴.
-   *  조의 무서움 단계 표를 따른다(큰 소리 칸이 꺼진 단계는 은은한 소리만, 1·2학년 조는 소리 없음). */
-  let recSpookTimer = null;
+  /** 영상 미션(1학년 교실 컵 쌓기·6학년 교실 탁구공) 녹화 중 소리 2번: 4~7초에 은은한 소리, 그 8~12초 뒤 큰 소리.
+   *  조의 무서움 단계 표를 따른다(큰 소리 칸이 꺼진 단계는 은은한 소리 2번, 1·2학년 조는 소리 없음). */
+  let recSpookTimers = [];
   function startRecSpooks() {
     stopRecSpooks();
     clearTimeout(spookTimer); clearTimeout(loudTimer);
     const soft = sfxOn(), loud = loudOn();
     if (!soft && !loud) return;
-    let n = 0;
-    const tick = () => {
-      if (!recorder || !stream) return;
-      n++;
-      if (loud && (!soft || n % 3 === 0)) playLoud(teamFear(cur.group)); else playSoft(sfxVol());
-      recSpookTimer = setTimeout(tick, soft ? 6000 + Math.random() * 5000 : 12000 + Math.random() * 6000);
-    };
-    recSpookTimer = setTimeout(tick, 3000 + Math.random() * 2000);
+    const first = 4000 + Math.random() * 3000, second = first + 8000 + Math.random() * 4000;
+    const at = (ms, fn) => recSpookTimers.push(setTimeout(() => { if (recorder && stream) fn(); }, ms));
+    at(first, () => (soft ? playSoft(sfxVol()) : playLoud(teamFear(cur.group))));
+    at(second, () => (loud ? playLoud(teamFear(cur.group)) : playSoft(sfxVol())));
   }
-  function stopRecSpooks() { clearTimeout(recSpookTimer); recSpookTimer = null; }
+  function stopRecSpooks() { recSpookTimers.forEach(clearTimeout); recSpookTimers = []; }
   document.addEventListener('visibilitychange', () => { if (document.hidden && recorder) finishVideo(); });
 
   let finishing = false;
